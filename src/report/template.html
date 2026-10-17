@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PR velocity</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%232a78d6' d='M2 9h3v6H2zM6.5 5h3v10h-3zM11 2h3v13h-3z'/%3E%3C/svg%3E"
+    />
+    <style>
+      :root {
+        color-scheme: light;
+        --page: #f9f9f7;
+        --surface: #fcfcfb;
+        --ink: #0b0b0b;
+        --ink-2: #52514e;
+        --muted: #6f6e69;
+        --grid: #e1e0d9;
+        --axis: #c3c2b7;
+        --border: rgba(11, 11, 11, 0.1);
+        --wash: rgba(11, 11, 11, 0.05);
+        --accent: #2a78d6;
+        --good: #006300;
+        --bad: #b42d2d;
+        --average: #52514e;
+        --series-1: #2a78d6;
+        --series-2: #eb6834;
+        --series-3: #1baf7a;
+        --series-4: #eda100;
+        --series-5: #e87ba4;
+        --series-6: #008300;
+        --series-7: #6250d6;
+        --series-8: #e34948;
+        --series-other: #a3a29b;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          color-scheme: dark;
+          --page: #0d0d0d;
+          --surface: #1a1a19;
+          --ink: #f0efec;
+          --ink-2: #c3c2b7;
+          --muted: #9a9890;
+          --grid: #2c2c2a;
+          --axis: #383835;
+          --border: rgba(255, 255, 255, 0.1);
+          --wash: rgba(255, 255, 255, 0.06);
+          --accent: #3987e5;
+          --good: #0ca30c;
+          --bad: #e66767;
+          --average: #c3c2b7;
+          --series-1: #3987e5;
+          --series-2: #d95926;
+          --series-3: #199e70;
+          --series-4: #c98500;
+          --series-5: #d55181;
+          --series-6: #008300;
+          --series-7: #9085e9;
+          --series-8: #e66767;
+          --series-other: #6b6a65;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--page);
+        color: var(--ink);
+        font:
+          14px/1.45 system-ui,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+      }
+      main {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 24px 16px 48px;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 0 0 4px;
+      }
+      h2 {
+        font-size: 15px;
+        margin: 0;
+      }
+      .meta,
+      .note {
+        color: var(--ink-2);
+        margin: 0;
+      }
+      .note {
+        font-size: 12.5px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 16px;
+        margin-top: 16px;
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px 20px;
+        align-items: flex-end;
+        margin-top: 20px;
+      }
+      .control {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+      }
+      .control-label {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .segmented {
+        display: inline-flex;
+        flex-wrap: wrap;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+        background: var(--surface);
+      }
+      .segmented button {
+        font: inherit;
+        color: var(--ink-2);
+        background: none;
+        border: 0;
+        border-right: 1px solid var(--border);
+        padding: 6px 10px;
+        cursor: pointer;
+      }
+      .segmented button:last-child {
+        border-right: 0;
+      }
+      .segmented button:hover {
+        background: var(--wash);
+      }
+      .segmented button[aria-pressed="true"] {
+        color: var(--ink);
+        font-weight: 600;
+        background: var(--wash);
+        box-shadow: inset 0 -2px 0 var(--accent);
+      }
+      .segmented button:disabled {
+        color: var(--muted);
+        cursor: not-allowed;
+      }
+      .dates {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      input[type="date"] {
+        font: inherit;
+        color: var(--ink);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 5px 8px;
+      }
+      details.repos summary {
+        cursor: pointer;
+        color: var(--ink-2);
+        padding: 6px 0;
+      }
+      .repo-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 16px;
+        margin-top: 8px;
+      }
+      .repo-list label {
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+        overflow-wrap: anywhere;
+      }
+      .link-button {
+        font: inherit;
+        color: var(--accent);
+        background: none;
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+        text-decoration: underline;
+      }
+      .tiles {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 12px;
+        margin-top: 16px;
+      }
+      .tile {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px 14px;
+      }
+      .tile-label {
+        color: var(--ink-2);
+        font-size: 12.5px;
+      }
+      .tile-value {
+        font-size: 24px;
+        font-weight: 600;
+        margin-top: 2px;
+      }
+      .tile-delta {
+        font-size: 12.5px;
+        color: var(--ink-2);
+        margin-top: 2px;
+        min-height: 18px;
+      }
+      .tile-delta .good {
+        color: var(--good);
+      }
+      .tile-delta .bad {
+        color: var(--bad);
+      }
+      .chart-head {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 8px;
+        align-items: baseline;
+      }
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 14px;
+        margin-top: 8px;
+        color: var(--ink-2);
+        font-size: 12.5px;
+      }
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .swatch {
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+        display: inline-block;
+      }
+      .line-key {
+        width: 14px;
+        height: 2px;
+        border-radius: 1px;
+        display: inline-block;
+      }
+      .chart {
+        position: relative;
+        margin-top: 8px;
+      }
+      .chart svg {
+        display: block;
+        width: 100%;
+        overflow: visible;
+      }
+      .chart text {
+        fill: var(--muted);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+      }
+      .chart .hit {
+        fill: transparent;
+        cursor: pointer;
+        outline: none;
+      }
+      .chart .hit:hover,
+      .chart .hit:focus-visible {
+        fill: var(--wash);
+      }
+      .chart .hit.selected {
+        fill: var(--wash);
+        stroke: var(--axis);
+      }
+      .empty {
+        color: var(--ink-2);
+        padding: 48px 0;
+        text-align: center;
+      }
+      .tooltip {
+        position: absolute;
+        pointer-events: none;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        padding: 8px 10px;
+        font-size: 12.5px;
+        min-width: 140px;
+        max-width: 260px;
+        z-index: 2;
+      }
+      .tooltip[hidden] {
+        display: none;
+      }
+      .tooltip .tt-head {
+        color: var(--ink-2);
+      }
+      .tooltip .tt-total {
+        font-size: 15px;
+        font-weight: 600;
+        margin: 2px 0 4px;
+      }
+      .tooltip .tt-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--ink-2);
+      }
+      .tooltip .tt-row strong {
+        color: var(--ink);
+        font-weight: 600;
+        margin-left: auto;
+        padding-left: 8px;
+      }
+      .details-summary {
+        margin: 6px 0 10px;
+        color: var(--ink-2);
+      }
+      .table-wrap {
+        overflow-x: auto;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 13px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--grid);
+        vertical-align: top;
+      }
+      th {
+        color: var(--muted);
+        font-weight: 500;
+        white-space: nowrap;
+      }
+      td.num,
+      th.num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      td.nowrap {
+        white-space: nowrap;
+      }
+      tr.is-reverted td {
+        background: var(--wash);
+      }
+      .tag {
+        display: inline-block;
+        font-size: 11px;
+        border: 1px solid var(--bad);
+        color: var(--bad);
+        border-radius: 4px;
+        padding: 0 4px;
+        margin-left: 6px;
+      }
+      @media (max-width: 600px) {
+        main {
+          padding-top: 16px;
+        }
+        .tile-value {
+          font-size: 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>PR velocity</h1>
+        <p class="meta" id="meta"></p>
+      </header>
+      <section class="controls" aria-label="Report controls">
+        <div class="control">
+          <span class="control-label" id="range-label">Date range</span>
+          <div class="dates">
+            <div
+              class="segmented"
+              id="presets"
+              role="group"
+              aria-labelledby="range-label"
+            ></div>
+            <input type="date" id="from" aria-label="From date" />
+            <span aria-hidden="true">to</span>
+            <input type="date" id="to" aria-label="To date" />
+          </div>
+        </div>
+        <div class="control">
+          <span class="control-label" id="period-label">Period</span>
+          <div
+            class="segmented"
+            id="periods"
+            role="group"
+            aria-labelledby="period-label"
+          ></div>
+        </div>
+        <div class="control">
+          <span class="control-label" id="metric-label">Metric</span>
+          <div
+            class="segmented"
+            id="metrics"
+            role="group"
+            aria-labelledby="metric-label"
+          ></div>
+        </div>
+        <div class="control">
+          <span class="control-label" id="split-label">Split</span>
+          <div
+            class="segmented"
+            id="splits"
+            role="group"
+            aria-labelledby="split-label"
+          ></div>
+        </div>
+      </section>
+      <details class="repos">
+        <summary id="repo-summary">Repos</summary>
+        <div>
+          <button type="button" class="link-button" id="repos-all">All</button>
+          ·
+          <button type="button" class="link-button" id="repos-none">
+            None
+          </button>
+        </div>
+        <div class="repo-list" id="repo-list"></div>
+      </details>
+      <section
+        class="tiles"
+        id="tiles"
+        aria-label="Summary for the selected range"
+      ></section>
+      <section class="card">
+        <div class="chart-head">
+          <h2 id="chart-title"></h2>
+          <p class="note" id="chart-note"></p>
+        </div>
+        <div class="legend" id="legend"></div>
+        <div class="chart" id="chart">
+          <div class="tooltip" id="tooltip" hidden></div>
+        </div>
+      </section>
+      <section class="card" id="details" aria-live="polite">
+        <h2 id="details-title">PRs</h2>
+        <p class="details-summary" id="details-summary">
+          Click a bar to list the PRs behind it.
+        </p>
+        <div class="table-wrap" id="details-table"></div>
+      </section>
+    </main>
+    <script type="application/json" id="scan-data">
+      /*DATA*/
+    </script>
+    <script>
+      /*SCRIPT*/
+    </script>
+  </body>
+</html>

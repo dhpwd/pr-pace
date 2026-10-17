@@ -1,5 +1,5 @@
 {
   "permissions": {
-    "allow": ["Bash(node --test)"]
+    "allow": ["Bash(npm test)", "Bash(npm run typecheck)"]
   }
 }
