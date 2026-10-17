@@ -62,6 +62,9 @@ describe("--exclude globs", () => {
     assert.equal(globMatcher("/api/*.json")("api/schema.json"), true);
     assert.equal(globMatcher("api/*.json")("api/v1/schema.json"), false);
     assert.equal(globMatcher("api/")("api/v1/schema.json"), true);
+    assert.equal(globMatcher("/api")("api/v1/schema.json"), true);
+    assert.equal(globMatcher("/api")("lib/api/x.js"), false);
+    assert.equal(globMatcher("api/")("lib/api/x.js"), true);
   });
 
   test("? matches one character and other characters are literal", () => {

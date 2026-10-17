@@ -4,10 +4,13 @@ import { renderReport } from "../src/report.js";
 import {
   assignSeries,
   chartModel,
+  loadView,
   presetRange,
   previousRange,
   totalsOf,
 } from "../src/report/client.js";
+
+let shaCounter = 0;
 
 /**
  * @param {Partial<import('../src/report/client.js').Row>} fields
@@ -16,7 +19,7 @@ import {
 function row(fields) {
   return {
     repo: "app",
-    sha: Math.random().toString(16).slice(2),
+    sha: String(++shaCounter).padStart(40, "0"),
     number: 1,
     title: "A PR",
     method: "squash",
@@ -59,7 +62,12 @@ describe("report figures", () => {
       (r) => r.repo,
     );
     const seriesOf = (/** @type {import('../src/report/client.js').Row} */ r) =>
-      series.get(r.repo) ?? { key: "__other", label: "Other", colour: "" };
+      series.get(r.repo) ?? {
+        key: "__other",
+        label: "Other",
+        colour: "",
+        rank: Infinity,
+      };
     const keys = ["2026-10-05", "2026-10-12"];
     const lines = chartModel(rows, keys, "week", "lines", seriesOf);
     assert.deepEqual(
@@ -105,6 +113,42 @@ describe("report figures", () => {
       reverts.columns.map((c) => c.average),
       [null, null, null, 0.25, 0.25],
     );
+  });
+
+  test("a remembered custom range that misses this report's data falls back to the default", () => {
+    /** @type {import('../src/report/client.js').View} */
+    const defaults = {
+      preset: "12m",
+      from: "2025-10-18",
+      to: "2026-10-17",
+      period: "week",
+      metric: "prs",
+      split: "none",
+      hiddenRepos: [],
+    };
+    const bounds = { firstDay: "2026-01-01", endDay: "2026-10-17" };
+    /** @param {object} saved */
+    const load = (saved) => {
+      Object.assign(globalThis, {
+        localStorage: { getItem: () => JSON.stringify(saved) },
+      });
+      try {
+        return loadView(defaults, false, bounds);
+      } finally {
+        Reflect.deleteProperty(globalThis, "localStorage");
+      }
+    };
+    const custom = { preset: "custom", from: "2026-02-01", to: "2026-02-28" };
+    assert.equal(load(custom).preset, "custom");
+    assert.equal(
+      load({ ...custom, from: "2024-01-01", to: "2024-02-01" }).preset,
+      "12m",
+    );
+    assert.equal(
+      load({ ...custom, from: "2027-01-01", to: "2027-02-01" }).preset,
+      "12m",
+    );
+    assert.equal(load({ split: "author" }).split, "none");
   });
 
   test("presets count back from the scan's run time, and the previous range has equal length", () => {

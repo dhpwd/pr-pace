@@ -112,6 +112,17 @@ describe("period bucketing", () => {
       Date.parse("2026-10-24T23:00:00Z"),
     );
   });
+
+  test("starts a day at the first instant on it where the clocks skip midnight", () => {
+    assert.equal(
+      startOfDay("2026-09-06", zoneFormatter("America/Santiago")),
+      Date.parse("2026-09-06T04:00:00Z"),
+    );
+    assert.equal(
+      startOfDay("2026-03-08", zoneFormatter("America/Havana")),
+      Date.parse("2026-03-08T05:00:00Z"),
+    );
+  });
 });
 
 describe("--since and --until", () => {
@@ -147,6 +158,7 @@ describe("--since and --until", () => {
       "2026-02-30",
       "yesterday",
       "2026-07-01T09:30",
+      "2026-02-30T00:00:00Z",
       "01/07/2026",
     ]) {
       assert.throws(

@@ -1,7 +1,6 @@
-// Calendar helpers shared by the CLI and the HTML report. The report inlines
-// every export here with Function.prototype.toString, so each export must be a
-// function declaration that uses nothing from this module except other exports.
-// Days are 'YYYY-MM-DD' strings in the scan's timezone, never the process's.
+// Calendar helpers shared by the CLI and the HTML report, which inlines every
+// export – see "Implementation constraints" in docs/specs/v1.md. Days are
+// 'YYYY-MM-DD' strings in the scan's timezone, never the process's.
 
 /**
  * @typedef {{ year: number, month: number, day: number, hour: number, minute: number, second: number }} ZonedParts
@@ -41,6 +40,28 @@ export function zonedParts(ms, formatter) {
     minute: parts.minute,
     second: parts.second,
   };
+}
+
+/**
+ * @param {string} day
+ * @returns {[number, number, number]} year, month (1–12), day of month
+ */
+export function parseDay(day) {
+  const [year, month, date] = day.split("-").map(Number);
+  return [year, month, date];
+}
+
+/**
+ * Whether `value` is a real calendar day written YYYY-MM-DD.
+ * @param {unknown} value
+ * @returns {value is string}
+ */
+export function isDay(value) {
+  return (
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    addDays(value, 0) === value
+  );
 }
 
 /**
@@ -102,11 +123,13 @@ export function formatInstant(ms, formatter) {
  * @param {Intl.DateTimeFormat} formatter
  */
 export function startOfDay(day, formatter) {
-  const [year, month, date] = day.split("-").map(Number);
+  const [year, month, date] = parseDay(day);
   const guess = Date.UTC(year, month - 1, date);
   const first = guess - offsetMinutes(guess, formatter) * 60000;
   const second = guess - offsetMinutes(first, formatter) * 60000;
-  return second;
+  // Where the clocks skip midnight, one candidate falls on the day before.
+  const onDay = [first, second].filter((ms) => dayOf(ms, formatter) === day);
+  return onDay.length > 0 ? Math.min(...onDay) : second;
 }
 
 /**
@@ -114,7 +137,7 @@ export function startOfDay(day, formatter) {
  * @param {number} n
  */
 export function addDays(day, n) {
-  const [year, month, date] = day.split("-").map(Number);
+  const [year, month, date] = parseDay(day);
   const d = new Date(Date.UTC(year, month - 1, date + n));
   return formatDay(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
 }
@@ -124,7 +147,7 @@ export function addDays(day, n) {
  * @param {number} n
  */
 export function addMonths(day, n) {
-  const [year, month, date] = day.split("-").map(Number);
+  const [year, month, date] = parseDay(day);
   const last = new Date(Date.UTC(year, month - 1 + n + 1, 0)).getUTCDate();
   const d = new Date(Date.UTC(year, month - 1 + n, Math.min(date, last)));
   return formatDay(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
@@ -136,8 +159,8 @@ export function addMonths(day, n) {
  * @param {string} b
  */
 export function daysBetween(a, b) {
-  const [ay, am, ad] = a.split("-").map(Number);
-  const [by, bm, bd] = b.split("-").map(Number);
+  const [ay, am, ad] = parseDay(a);
+  const [by, bm, bd] = parseDay(b);
   return Math.round(
     (Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000,
   );
@@ -151,7 +174,7 @@ export function daysBetween(a, b) {
 export function periodOf(day, period) {
   if (period === "month") return day.slice(0, 7);
   if (period === "week") {
-    const [year, month, date] = day.split("-").map(Number);
+    const [year, month, date] = parseDay(day);
     const weekday = new Date(Date.UTC(year, month - 1, date)).getUTCDay();
     return addDays(day, -((weekday + 6) % 7));
   }

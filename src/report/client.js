@@ -1,12 +1,12 @@
-// The report's browser code. renderReport inlines every export here, and from
-// ../time.js, with Function.prototype.toString – so each export is a function
-// declaration that uses only browser globals, its own locals and other
-// inlined exports, imported under their own names.
+// The report's browser code, inlined into the page with ../time.js – see
+// "Implementation constraints" in docs/specs/v1.md.
 import {
   addDays,
   addMonths,
   dayOf,
   daysBetween,
+  isDay,
+  parseDay,
   periodOf,
   periodsBetween,
   zoneFormatter,
@@ -22,7 +22,7 @@ import {
  * @typedef {PrResult & { day: string, authorKey: string }} Row
  * @typedef {{ from: string, to: string }} Range
  * @typedef {{ preset: Preset, from: string, to: string, period: Period, metric: Metric, split: Split, hiddenRepos: string[] }} View
- * @typedef {{ key: string, label: string, colour: string }} Series
+ * @typedef {{ key: string, label: string, colour: string, rank: number }} Series rank orders series, "Other" last
  * @typedef {{ count: number, lines: number, score: number, reverted: number }} Totals
  * @typedef {{ series: Series, totals: Totals, value: number | null }} Part
  * @typedef {{ key: string, rows: Row[], totals: Totals, value: number | null, parts: Part[], average: number | null }} Column
@@ -83,8 +83,8 @@ export function previousRange(range) {
 }
 
 /**
- * Colours follow the entity, not the current filter: up to eight entities get
- * a hue each by PR count over the whole scan; past eight, the top seven do and
+ * Colours follow the entity, not the current filter. Up to eight entities get
+ * a hue each by PR count over the whole scan. Past eight, the top seven do and
  * the rest share "Other".
  * @param {Row[]} rows
  * @param {(row: Row) => string} keyOf
@@ -111,6 +111,7 @@ export function assignSeries(rows, keyOf, labelOf) {
       key: entry.key,
       label: entry.label,
       colour: `var(--series-${i + 1})`,
+      rank: i,
     });
   });
   return series;
@@ -139,9 +140,7 @@ export function chartModel(rows, periodKeys, period, metric, seriesOf) {
       if (!row.is_revert) present.set(seriesOf(row).key, seriesOf(row));
     }
   }
-  const order = (/** @type {Series} */ s) =>
-    s.key === "__other" ? 99 : Number(/\d+/.exec(s.colour)?.[0] ?? 98);
-  const series = [...present.values()].sort((a, b) => order(a) - order(b));
+  const series = [...present.values()].sort((a, b) => a.rank - b.rank);
 
   /** @type {Column[]} */
   const columns = periodKeys.map((key) => {
@@ -228,14 +227,20 @@ export function formatMetric(value, metric, compact = false) {
   return formatNumber(value, Number.isInteger(value) ? 0 : 1);
 }
 
+/** @param {number} month 1–12 */
+export function monthName(month) {
+  return "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ")[
+    month - 1
+  ];
+}
+
 /**
  * @param {string} day
  * @param {boolean} withYear
  */
 export function dayLabel(day, withYear) {
-  const months = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
-  const [year, month, date] = day.split("-").map(Number);
-  return `${date} ${months[month - 1]}${withYear ? ` ${year}` : ""}`;
+  const [year, month, date] = parseDay(day);
+  return `${date} ${monthName(month)}${withYear ? ` ${year}` : ""}`;
 }
 
 /**
@@ -245,9 +250,8 @@ export function dayLabel(day, withYear) {
  */
 export function periodLabel(key, period, short) {
   if (period === "month") {
-    const months = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
-    const [year, month] = key.split("-").map(Number);
-    return `${months[month - 1]} ${year}`;
+    const [year, month] = parseDay(`${key}-01`);
+    return `${monthName(month)} ${year}`;
   }
   if (period === "week") {
     return short ? dayLabel(key, false) : `Week of ${dayLabel(key, true)}`;
@@ -309,11 +313,14 @@ export function byId(id) {
 /**
  * Remembered controls. Storage can be missing or throw (private windows,
  * file:// in some browsers), so every access is guarded.
+ * A saved custom range that misses this report's data (one saved from
+ * another report, say) falls back to the default.
  * @param {View} defaults
  * @param {boolean} allowAuthorSplit
+ * @param {{ firstDay: string, endDay: string }} bounds
  * @returns {View}
  */
-export function loadView(defaults, allowAuthorSplit) {
+export function loadView(defaults, allowAuthorSplit, bounds) {
   /** @type {Partial<View>} */
   let saved = {};
   try {
@@ -325,17 +332,13 @@ export function loadView(defaults, allowAuthorSplit) {
     /** @type {unknown} */ value,
     /** @type {string[]} */ allowed,
   ) => (typeof value === "string" && allowed.includes(value) ? value : null);
-  const isDay = (/** @type {unknown} */ value) =>
-    typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
   const view = {
     preset: /** @type {Preset} */ (
       pick(saved.preset, ["30d", "90d", "12m", "all", "custom"]) ??
         defaults.preset
     ),
-    from: isDay(saved.from)
-      ? /** @type {string} */ (saved.from)
-      : defaults.from,
-    to: isDay(saved.to) ? /** @type {string} */ (saved.to) : defaults.to,
+    from: isDay(saved.from) ? saved.from : defaults.from,
+    to: isDay(saved.to) ? saved.to : defaults.to,
     period: /** @type {Period} */ (
       pick(saved.period, ["day", "week", "month"]) ?? defaults.period
     ),
@@ -353,8 +356,14 @@ export function loadView(defaults, allowAuthorSplit) {
       ? saved.hiddenRepos.filter((name) => typeof name === "string")
       : [],
   };
-  if (view.preset === "custom" && view.from > view.to)
+  if (
+    view.preset === "custom" &&
+    (view.from > view.to ||
+      view.to < bounds.firstDay ||
+      view.from > bounds.endDay)
+  ) {
     view.preset = defaults.preset;
+  }
   return view;
 }
 
@@ -418,7 +427,7 @@ export function drawChart(
   const root = svg("svg", {
     viewBox: `0 0 ${width} ${height}`,
     height,
-    "aria-label": "Bar chart; the PR list below gives the same figures",
+    "aria-label": "Bar chart. The PR list below gives the same figures",
   });
 
   for (let value = 0; value <= ticks.max + 1e-9; value += ticks.step) {
@@ -472,7 +481,12 @@ export function drawChart(
           ? column.parts
           : [
               {
-                series: { key: "total", label: "", colour: "var(--series-1)" },
+                series: {
+                  key: "total",
+                  label: "",
+                  colour: "var(--series-1)",
+                  rank: 0,
+                },
                 value: column.value,
               },
             ];
@@ -642,11 +656,19 @@ export function drawDetails(column, period, metric, showAuthor) {
   const reverts = column.rows.length - counted.length;
   const t = column.totals;
   title.textContent = `PRs merged ${period === "day" ? "on" : "in"} ${periodLabel(column.key, period, false).replace(/^Week/, "the week")}`;
+  const bySeries = column.parts
+    .filter((part) => part.totals.count > 0)
+    .map(
+      (part) =>
+        `${part.series.label} ${part.totals.reverted} of ${part.totals.count}`,
+    );
   const figures = {
     prs: `${t.count} PR${t.count === 1 ? "" : "s"}`,
     lines: `${t.count} PR${t.count === 1 ? "" : "s"} · ${formatNumber(t.lines)} lines changed`,
     score: `${t.count} PR${t.count === 1 ? "" : "s"} · score ${formatNumber(t.score, 1)}`,
-    reverts: `${t.reverted} of ${t.count} PR${t.count === 1 ? "" : "s"} reverted = ${formatMetric(column.value, "reverts")}`,
+    reverts:
+      `${t.reverted} of ${t.count} PR${t.count === 1 ? "" : "s"} reverted = ${formatMetric(column.value, "reverts")}` +
+      (bySeries.length > 0 ? ` (${bySeries.join(", ")})` : ""),
   };
   summary.textContent =
     figures[metric] +
@@ -747,8 +769,6 @@ export function drawTiles(current, previous, previousLabel) {
         ]),
         ` vs ${previousLabel}`,
       );
-    } else if (spec.note) {
-      delta.append(spec.note);
     }
     tiles.append(
       h("div", { class: "tile" }, [
@@ -759,6 +779,7 @@ export function drawTiles(current, previous, previousLabel) {
             : formatMetric(value, spec.metric),
         ]),
         delta,
+        ...(spec.note ? [h("div", { class: "tile-delta" }, [spec.note])] : []),
       ]),
     );
   }
@@ -778,7 +799,7 @@ export function main(scan) {
   const boundDay = (/** @type {string | null} */ value) =>
     value === null
       ? null
-      : /^\d{4}-\d{2}-\d{2}$/.test(value)
+      : isDay(value)
         ? value
         : dayOf(Date.parse(value), formatter);
   const generatedDay = dayOf(Date.parse(scan.generated_at), formatter);
@@ -808,6 +829,7 @@ export function main(scan) {
     key: "__other",
     label: "Other",
     colour: "var(--series-other)",
+    rank: Infinity,
   };
 
   const initialRange = presetRange("12m", bounds);
@@ -823,6 +845,7 @@ export function main(scan) {
       hiddenRepos: [],
     },
     allowAuthorSplit,
+    bounds,
   );
   /** @type {string | null} */
   let selected = null;
@@ -833,7 +856,7 @@ export function main(scan) {
     ? "all authors"
     : scan.options.authors.length > 0
       ? scan.options.authors.join(", ")
-      : "no author filter";
+      : "no git user.email configured, so no PRs counted";
   byId("meta").textContent =
     `Generated ${dayLabel(generatedDay, true)} · ${scan.repos.length} repo${scan.repos.length === 1 ? "" : "s"} scanned · ${authors} · dates in ${scan.options.timezone}` +
     ` · lines leave out ${scan.options.include_docs ? "" : "docs, "}lockfiles and generated files`;
@@ -991,6 +1014,10 @@ export function main(scan) {
       (key) => {
         selected = key;
         drawChartAndDetails();
+        // Redrawing replaced the focused bar, so keyboard users get it back.
+        /** @type {SVGElement | null} */ (
+          chart.querySelector(`rect.hit[data-period="${key}"]`)
+        )?.focus({ preventScroll: true });
         byId("details").scrollIntoView({
           behavior: "smooth",
           block: "nearest",

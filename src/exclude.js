@@ -28,10 +28,11 @@ export const LINGUIST_ATTRIBUTES = [
 /**
  * Compiles a glob to a RegExp over a whole path or segment. Supports `*`
  * (within a segment), `**` (across segments) and `?`. Everything else is
- * literal. Written by hand because path.matchesGlob needs Node 22.
+ * literal. Written by hand for the Node 20 floor – see "Implementation
+ * constraints" in docs/specs/v1.md.
  * @param {string} glob
  */
-export function globToRegExp(glob) {
+function globToRegExp(glob) {
   let source = "";
   for (let i = 0; i < glob.length; i++) {
     const char = glob[i];
@@ -55,16 +56,18 @@ export function globToRegExp(glob) {
 }
 
 /**
- * A glob without a slash matches any file or folder name at any depth, so
- * `fixtures` drops everything under any `fixtures/`. A glob with a slash is
- * anchored at the repo root and matches a path or any folder above it.
+ * As in .gitignore: a glob without a slash matches any file or folder name at
+ * any depth, so `fixtures` drops everything under any `fixtures/`. A leading
+ * or inner slash anchors it at the repo root, where it matches a path or any
+ * folder above it. A trailing slash alone doesn't anchor.
  * @param {string} glob
  * @returns {(path: string) => boolean}
  */
 export function globMatcher(glob) {
-  const trimmed = glob.replace(/^\/+/, "").replace(/\/+$/, "");
-  const regexp = globToRegExp(trimmed);
-  if (!trimmed.includes("/")) {
+  const withoutTrailing = glob.replace(/\/+$/, "");
+  const anchored = withoutTrailing.includes("/");
+  const regexp = globToRegExp(withoutTrailing.replace(/^\/+/, ""));
+  if (!anchored) {
     return (path) => path.split("/").some((segment) => regexp.test(segment));
   }
   return (path) => {

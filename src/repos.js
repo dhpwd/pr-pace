@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 
 /** @param {string} dir */
 function isDirectory(dir) {
@@ -51,25 +51,40 @@ export function findRepos(paths, depth) {
         `${path} is not a folder – pass a repo or a folder of repos`,
       );
     }
+    const before = found.length;
     walk(dir, depth);
+    if (found.length === before) {
+      throw new Error(
+        `no git repos found in ${path} (searched ${depth} folder level${depth === 1 ? "" : "s"} down) – pass a repo, or raise --depth`,
+      );
+    }
   }
   return [...new Set(found)];
 }
 
 /**
- * Display names: each repo's folder name, with the parent folder added where
- * two repos share a name.
+ * Display names: each repo's folder name, with parent folders added until
+ * repos that share a name can be told apart.
  * @param {string[]} repoPaths
  */
 export function repoNames(repoPaths) {
-  /** @type {Map<string, number>} */
-  const counts = new Map();
-  for (const path of repoPaths) {
-    counts.set(basename(path), (counts.get(basename(path)) ?? 0) + 1);
+  const segments = repoPaths.map((path) => path.split(sep).filter(Boolean));
+  const depths = repoPaths.map(() => 1);
+  const nameOf = (/** @type {number} */ i) =>
+    segments[i].slice(-depths[i]).join("/");
+  for (;;) {
+    /** @type {Map<string, number>} */
+    const counts = new Map();
+    segments.forEach((_, i) => {
+      counts.set(nameOf(i), (counts.get(nameOf(i)) ?? 0) + 1);
+    });
+    const clashing = segments
+      .map((_, i) => i)
+      .filter(
+        (i) =>
+          (counts.get(nameOf(i)) ?? 0) > 1 && depths[i] < segments[i].length,
+      );
+    if (clashing.length === 0) return segments.map((_, i) => nameOf(i));
+    for (const i of clashing) depths[i]++;
   }
-  return repoPaths.map((path) =>
-    (counts.get(basename(path)) ?? 0) > 1
-      ? `${basename(dirname(path))}/${basename(path)}`
-      : basename(path),
-  );
 }

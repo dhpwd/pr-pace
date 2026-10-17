@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { after, describe, test } from "node:test";
+import { repoNames } from "../src/repos.js";
 import { scan } from "../src/scan.js";
 import {
   DEV,
@@ -434,10 +435,48 @@ describe("finding repos", () => {
     assert.match(result.repos[1].warnings[0], /already counted under one/);
   });
 
+  test("a revert only a later clone holds still marks the PR kept from an earlier clone", () => {
+    const upstream = new Repo(join(root, "clone-upstream"));
+    upstream.commit("Initial commit");
+    const original = upstream.squash(1, "Add caching", {
+      files: { "cache.js": "c\n" },
+    });
+    const folder = join(root, "stale-clones");
+    upstream.git("clone", "-q", upstream.dir, join(folder, "a-stale"));
+    const revert = upstream.squash(2, 'Revert "Add caching (#1)"', {
+      files: { "cache.js": null },
+      body: `This reverts commit ${original}.`,
+    });
+    upstream.git("clone", "-q", upstream.dir, join(folder, "b-fresh"));
+    const result = scan(scanOptions([folder], { allAuthors: true }));
+    assert.equal(pr(result, 1).repo, "a-stale");
+    assert.equal(pr(result, 1).reverted_by, revert);
+    assert.equal(pr(result, 2).repo, "b-fresh");
+  });
+
+  test("repos sharing a folder name take as many parent folders as tell them apart", () => {
+    assert.deepEqual(repoNames(["/w/work/x/app", "/w/oss/x/app", "/w/solo"]), [
+      "work/x/app",
+      "oss/x/app",
+      "solo",
+    ]);
+  });
+
   test("a path that isn't a folder is an error naming it", () => {
     assert.throws(
       () => scan(scanOptions([join(root, "missing")])),
       /missing is not a folder/,
+    );
+  });
+
+  test("each path must hold a repo", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    const empty = join(root, "empty-folder");
+    mkdirSync(empty);
+    assert.throws(
+      () => scan(scanOptions([repo.dir, empty])),
+      /no git repos found in .*empty-folder .* raise --depth/,
     );
   });
 });

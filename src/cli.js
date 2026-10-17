@@ -4,9 +4,9 @@ import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { renderReport } from "./report.js";
 import { scan } from "./scan.js";
-import { addDays, startOfDay, zoneFormatter } from "./time.js";
+import { addDays, isDay, startOfDay, zoneFormatter } from "./time.js";
 
-class UsageError extends Error {}
+/** @typedef {Record<string, string | boolean | (string | boolean)[] | undefined>} ArgValues */
 
 const VERSION = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8"),
@@ -47,8 +47,8 @@ const SCAN_OPTIONS_HELP = `  --depth <n>             How many folder levels belo
   --exclude <glob>        Leave matching paths out of lines changed.
                           Repeatable. * matches within a folder, ** across
                           folders, ? one character. A glob without / matches
-                          a file or folder name at any depth; one with / is
-                          matched from the repo root`;
+                          a file or folder name at any depth. A leading or
+                          inner / anchors it at the repo root`;
 
 const NOTES_HELP = `Each path is a repo, or a folder whose subfolders are repos (default: .).
 Dates are YYYY-MM-DD in this machine's timezone, or a full ISO 8601 timestamp
@@ -84,7 +84,8 @@ attachment.
 
 Options
   --from <scan.json>      Build the report from a saved scan instead of
-                          scanning. Scan options don't apply with it
+                          scanning. Paths and scan options can't be combined
+                          with it
   --out <file>            Where to write the report (default:
                           pr-velocity.html)
   --open                  Open the report in the default browser
@@ -133,7 +134,6 @@ const COMMANDS = {
   },
 };
 
-const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const TIMESTAMP =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/i;
 
@@ -146,23 +146,24 @@ const TIMESTAMP =
  */
 export function parseBound(flag, value, timeZone) {
   const formatter = zoneFormatter(timeZone);
-  if (DAY.test(value) && addDays(value, 0) === value) {
+  const datePart = value.slice(0, 10);
+  if (isDay(value)) {
     return startOfDay(
       flag === "--until" ? addDays(value, 1) : value,
       formatter,
     );
   }
-  if (TIMESTAMP.test(value)) {
+  if (TIMESTAMP.test(value) && isDay(datePart)) {
     const ms = Date.parse(value);
     if (!Number.isNaN(ms)) return flag === "--until" ? ms + 1 : ms;
   }
-  throw new UsageError(
+  throw new Error(
     `${flag} "${value}" isn't a date I can read – use YYYY-MM-DD (taken in ${timeZone}) or a full ISO 8601 timestamp such as 2026-10-01T09:00:00+01:00`,
   );
 }
 
 /**
- * @param {Record<string, string | boolean | (string | boolean)[] | undefined>} values
+ * @param {ArgValues} values
  * @param {string[]} positionals
  * @returns {import('./scan.js').ScanOptions}
  */
@@ -170,13 +171,13 @@ function scanOptions(values, positionals) {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const depth = /** @type {string | undefined} */ (values.depth) ?? "1";
   if (!/^\d+$/.test(depth)) {
-    throw new UsageError(
+    throw new Error(
       `--depth "${depth}" isn't a whole number – pass 0 or more folder levels`,
     );
   }
   const authors = /** @type {string[] | undefined} */ (values.author) ?? [];
   if (authors.length > 0 && values["all-authors"]) {
-    throw new UsageError(
+    throw new Error(
       "--author and --all-authors can't be combined – pass one or the other",
     );
   }
@@ -187,7 +188,7 @@ function scanOptions(values, positionals) {
   const untilMs =
     until === null ? null : parseBound("--until", until, timeZone);
   if (sinceMs !== null && untilMs !== null && sinceMs >= untilMs) {
-    throw new UsageError("--since is after --until – swap them round");
+    throw new Error("--since is after --until – swap them round");
   }
   return {
     paths: positionals.length > 0 ? positionals : ["."],
@@ -222,7 +223,7 @@ function readScan(file) {
   try {
     parsed = JSON.parse(readFileSync(file, "utf8"));
   } catch (error) {
-    throw new UsageError(
+    throw new Error(
       `couldn't read ${file} (${/** @type {Error} */ (error).message}) – pass a file written by pr-velocity scan`,
     );
   }
@@ -235,11 +236,25 @@ function readScan(file) {
     !Array.isArray(candidate.repos) ||
     !candidate.options
   ) {
-    throw new UsageError(
+    throw new Error(
       `${file} isn't a pr-velocity scan – pass a file written by pr-velocity scan`,
     );
   }
   return /** @type {import('./scan.js').ScanResult} */ (candidate);
+}
+
+/**
+ * @param {string} file
+ * @param {string} content
+ */
+function writeOutput(file, content) {
+  try {
+    writeFileSync(file, content);
+  } catch (error) {
+    throw new Error(
+      `couldn't write ${file} (${/** @type {Error} */ (error).message}) – check the folder exists and is writable`,
+    );
+  }
 }
 
 /** @param {string} file */
@@ -261,7 +276,7 @@ function openInBrowser(file) {
 }
 
 /**
- * @param {Record<string, string | boolean | (string | boolean)[] | undefined>} values
+ * @param {ArgValues} values
  * @param {string[]} positionals
  */
 function runScan(values, positionals) {
@@ -269,7 +284,7 @@ function runScan(values, positionals) {
   printWarnings(result);
   const json = `${JSON.stringify(result, null, 2)}\n`;
   if (typeof values.out === "string") {
-    writeFileSync(values.out, json);
+    writeOutput(values.out, json);
     process.stderr.write(
       `pr-velocity: wrote ${values.out} – ${result.prs.length} PRs from ${result.repos.length} repos\n`,
     );
@@ -279,7 +294,7 @@ function runScan(values, positionals) {
 }
 
 /**
- * @param {Record<string, string | boolean | (string | boolean)[] | undefined>} values
+ * @param {ArgValues} values
  * @param {string[]} positionals
  */
 function runReport(values, positionals) {
@@ -294,7 +309,7 @@ function runReport(values, positionals) {
         ...(positionals.length > 0 ? ["paths"] : []),
         ...scanFlags.map((name) => `--${name}`),
       ];
-      throw new UsageError(
+      throw new Error(
         `--from builds the report from a saved scan, so ${given.join(", ")} can't be used with it – drop them, or drop --from to scan afresh`,
       );
     }
@@ -304,7 +319,7 @@ function runReport(values, positionals) {
     printWarnings(result);
   }
   const out = typeof values.out === "string" ? values.out : "pr-velocity.html";
-  writeFileSync(out, renderReport(result));
+  writeOutput(out, renderReport(result));
   process.stderr.write(
     `pr-velocity: wrote ${out} – ${result.prs.length} PRs from ${result.repos.length} repos\n`,
   );
@@ -318,21 +333,25 @@ function runReport(values, positionals) {
 export function main(argv) {
   const [command, ...rest] = argv;
   try {
-    if (command === undefined || command === "-h" || command === "--help") {
+    if (command === undefined) {
+      process.stderr.write(MAIN_HELP);
+      return 1;
+    }
+    if (command === "-h" || command === "--help") {
       process.stdout.write(MAIN_HELP);
-      return command === undefined ? 1 : 0;
+      return 0;
     }
     if (command === "-v" || command === "--version") {
       process.stdout.write(`${VERSION}\n`);
       return 0;
     }
     if (command !== "scan" && command !== "report") {
-      throw new UsageError(
+      throw new Error(
         `unknown command "${command}" – use scan or report (pr-velocity --help lists both)`,
       );
     }
     const spec = COMMANDS[command];
-    /** @type {{ values: Record<string, string | boolean | (string | boolean)[] | undefined>, positionals: string[] }} */
+    /** @type {{ values: ArgValues, positionals: string[] }} */
     let parsed;
     try {
       parsed = parseArgs({
@@ -344,7 +363,7 @@ export function main(argv) {
     } catch (error) {
       const err = /** @type {NodeJS.ErrnoException} */ (error);
       const unknown = /^Unknown option '([^']+)'/.exec(err.message);
-      throw new UsageError(
+      throw new Error(
         unknown
           ? `unknown option ${unknown[1]} – pr-velocity ${command} --help lists the options`
           : `${err.message} – pr-velocity ${command} --help lists the options`,

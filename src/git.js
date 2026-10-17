@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 
 /**
- * @typedef {{ ok: boolean, stdout: string, stderr: string }} GitResult
+ * @typedef {{ ok: boolean, stdout: string, error: string }} GitResult `error` is stderr's first line, for warnings
  */
 
 /**
@@ -33,6 +33,6 @@ export function git(cwd, args, options = {}) {
   return {
     ok: result.status === 0,
     stdout: result.stdout,
-    stderr: result.stderr.trim(),
+    error: result.stderr.trim().split("\n")[0],
   };
 }

@@ -114,6 +114,11 @@ describe("scan", () => {
       [["scan", "--depth", "-1"], /--depth/],
       [["scan", join(root, "nowhere")], /is not a folder/],
       [["frobnicate"], /unknown command "frobnicate"/],
+      [[], /Usage/],
+      [
+        ["scan", repo.dir, "--out", join(root, "no-such-folder", "x.json")],
+        /couldn't write .* check the folder exists/,
+      ],
     ];
     for (const [args, message] of cases) {
       const result = run(.../** @type {string[]} */ (args));

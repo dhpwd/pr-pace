@@ -83,12 +83,12 @@ const BRANCH_CANDIDATES = [
 const GITHUB_MERGE = /^Merge pull request #(\d+) from /;
 const GITLAB_MERGE = /See merge request \S*!(\d+)/;
 const PR_SUFFIX = /\(#(\d+)\)\s*$/;
-const REVERTS_COMMIT = /This reverts commit ([0-9a-fA-F]{7,40})/g;
+const REVERTS_COMMIT = /This reverts commit ([0-9a-fA-F]{7,64})/g;
 const REVERT_PREFIX = 'Revert "';
 const REVERT_QUOTE = /^Revert "(.*)"/s;
 
 /** @param {string} text */
-export function stripPrSuffix(text) {
+function stripPrSuffix(text) {
   return text.replace(/(?:\s*\(#\d+\))+\s*$/, "");
 }
 
@@ -111,7 +111,7 @@ function splitMessage(message) {
  * @param {string} stdout
  * @returns {Commit[]}
  */
-export function parseLog(stdout) {
+function parseLog(stdout) {
   /** @type {Commit[]} */
   const commits = [];
   for (const record of stdout.split(RECORD).slice(1)) {
@@ -158,10 +158,10 @@ export function parseLog(stdout) {
  * @param {Commit} commit
  * @returns {{ method: 'squash' | 'merge', number: number, title: string } | null}
  */
-export function classify(commit) {
-  const suffix = PR_SUFFIX.exec(commit.subject);
+function classify(commit) {
+  const suffix = PR_SUFFIX.exec(commit.subject)?.[1];
   if (commit.parents.length >= 2) {
-    const github = GITHUB_MERGE.exec(commit.subject);
+    const github = GITHUB_MERGE.exec(commit.subject)?.[1];
     if (github) {
       const titleLine = commit.body
         .split("\n")
@@ -169,35 +169,26 @@ export function classify(commit) {
         .find((line) => line !== "");
       return {
         method: "merge",
-        number: Number(github[1]),
+        number: Number(github),
         title: stripPrSuffix(titleLine ?? commit.subject),
       };
     }
-    const gitlab = GITLAB_MERGE.exec(commit.message);
-    if (gitlab) {
-      return {
-        method: "merge",
-        number: Number(gitlab[1]),
-        title: stripPrSuffix(commit.subject),
-      };
-    }
-    if (suffix) {
-      return {
-        method: "merge",
-        number: Number(suffix[1]),
-        title: stripPrSuffix(commit.subject),
-      };
-    }
-    return null;
+    const number = GITLAB_MERGE.exec(commit.message)?.[1] ?? suffix;
+    return number
+      ? {
+          method: "merge",
+          number: Number(number),
+          title: stripPrSuffix(commit.subject),
+        }
+      : null;
   }
-  if (commit.parents.length === 1 && suffix) {
-    return {
-      method: "squash",
-      number: Number(suffix[1]),
-      title: stripPrSuffix(commit.subject),
-    };
-  }
-  return null;
+  return commit.parents.length === 1 && suffix
+    ? {
+        method: "squash",
+        number: Number(suffix),
+        title: stripPrSuffix(commit.subject),
+      }
+    : null;
 }
 
 /**
@@ -205,7 +196,7 @@ export function classify(commit) {
  * whole first-parent history, oldest first, before any author or date filter.
  * @param {Pr[]} prs oldest first
  */
-export function linkReverts(prs) {
+function linkReverts(prs) {
   /** @type {Map<string, Pr>} */
   const bySha = new Map();
   /** @type {Map<string, Pr>} */
@@ -215,12 +206,15 @@ export function linkReverts(prs) {
     let original;
     for (const [, sha] of pr.message.matchAll(REVERTS_COMMIT)) {
       const wanted = sha.toLowerCase();
-      original =
-        wanted.length === 40
-          ? bySha.get(wanted)
-          : [...bySha.values()].find((earlier) =>
-              earlier.sha.startsWith(wanted),
-            );
+      original = bySha.get(wanted);
+      if (!original) {
+        for (const earlier of bySha.values()) {
+          if (earlier.sha.startsWith(wanted)) {
+            original = earlier;
+            break;
+          }
+        }
+      }
       if (original) break;
     }
     const quoted = REVERT_QUOTE.exec(pr.title)?.[1];
@@ -362,7 +356,7 @@ function linguistExcluded(repoPath, ref, paths, warnings) {
   );
   if (!checked.ok) {
     warnings.push(
-      `couldn't read .gitattributes (${checked.stderr.split("\n")[0]}) – linguist exclusions not applied; git 2.40 or later is needed`,
+      `couldn't read .gitattributes (${checked.error}) – linguist exclusions not applied, as they need git 2.40 or later`,
     );
     return excluded;
   }
@@ -390,7 +384,7 @@ function applyBranchAuthors(repoPath, merges, warnings) {
   );
   if (!listed.ok) {
     warnings.push(
-      `couldn't read merge PRs' branch commits (${listed.stderr.split("\n")[0]}) – their authors are the merge commits' authors`,
+      `couldn't read merge PRs' branch commits (${listed.error}) – their authors are the merge commits' authors`,
     );
     return;
   }
@@ -456,14 +450,14 @@ function scanRepo(repoPath, name, options, excludePath, formatter) {
     const fetched = git(repoPath, ["fetch", "--quiet"]);
     if (!fetched.ok) {
       warnings.push(
-        `git fetch failed (${fetched.stderr.split("\n")[0]}) – scanned the local copy as it is`,
+        `git fetch failed (${fetched.error}) – scanned the local copy as it is`,
       );
     }
   }
 
   const branch = resolveBranch(repoPath, options.branch);
   if ("error" in branch) {
-    warnings.push(`${branch.error}; skipped`);
+    warnings.push(`skipped: ${branch.error}`);
     return empty;
   }
   repo.branch = branch.name;
@@ -480,7 +474,7 @@ function scanRepo(repoPath, name, options, excludePath, formatter) {
     "--",
   ]);
   if (!log.ok) {
-    warnings.push(`git log failed (${log.stderr.split("\n")[0]}); skipped`);
+    warnings.push(`skipped: git log failed (${log.error})`);
     return empty;
   }
   const commits = parseLog(log.stdout).reverse();
@@ -522,7 +516,7 @@ function scanRepo(repoPath, name, options, excludePath, formatter) {
   );
   if (prsInRange.length > 0 && prs.length === 0 && !options.allAuthors) {
     warnings.push(
-      `no PRs match the author filter; most frequent PR authors: ${topAuthors(prsInRange).join(", ")} – pass --author to choose`,
+      `no PRs match the author filter. Most frequent PR authors: ${topAuthors(prsInRange).join(", ")} – pass --author to choose`,
     );
   }
 
@@ -597,11 +591,6 @@ function toResult(pr, repoName, isExcluded, formatter) {
  */
 export function scan(options) {
   const repoPaths = findRepos(options.paths, options.depth);
-  if (repoPaths.length === 0) {
-    throw new Error(
-      `no git repos found in ${options.paths.join(", ")} (searched ${options.depth} folder level${options.depth === 1 ? "" : "s"} down) – pass a repo, or raise --depth`,
-    );
-  }
   const names = repoNames(repoPaths);
   const excludePath = pathExcluder({
     includeDocs: options.includeDocs,
@@ -615,6 +604,8 @@ export function scan(options) {
   const repos = [];
   /** @type {{ time: number, result: PrResult }[]} */
   const kept = [];
+  /** @type {Map<string, PrResult>} */
+  const keptBySha = new Map();
   /** @type {Map<string, string>} */
   const defaultEmails = new Map();
 
@@ -633,11 +624,17 @@ export function scan(options) {
     const duplicates = new Map();
     for (const pr of prs) {
       const owner = seen.get(pr.result.sha);
+      const first = keptBySha.get(pr.result.sha);
       if (owner) {
+        // A later clone can hold a revert that an earlier, staler one lacks.
+        if (first && first.reverted_by === null) {
+          first.reverted_by = pr.result.reverted_by;
+        }
         duplicates.set(owner, (duplicates.get(owner) ?? 0) + 1);
         continue;
       }
       seen.set(pr.result.sha, repo.name);
+      keptBySha.set(pr.result.sha, pr.result);
       kept.push(pr);
       repo.prs++;
     }
