@@ -778,7 +778,7 @@ export function drawTiles(current, previous, previousLabel) {
             ? `${formatMetric(value, "reverts")} (${current.reverted}/${current.count})`
             : formatMetric(value, spec.metric),
         ]),
-        delta,
+        ...(delta.childNodes.length > 0 || !spec.note ? [delta] : []),
         ...(spec.note ? [h("div", { class: "tile-delta" }, [spec.note])] : []),
       ]),
     );
