@@ -27,8 +27,19 @@ function reportScript() {
  * @param {import('./scan.js').ScanResult} scan
  */
 export function renderReport(scan) {
+  // The report shows neither repos' paths nor their warnings, and both can
+  // carry local folder names into a file that gets sent around.
+  const embedded = {
+    ...scan,
+    repos: scan.repos.map(({ name, branch, prs, direct_commits_ignored }) => ({
+      name,
+      branch,
+      prs,
+      direct_commits_ignored,
+    })),
+  };
   // Escaping "<" keeps titles like "</script>" from closing the data block.
-  const data = JSON.stringify(scan).replace(/</g, "\\u003c");
+  const data = JSON.stringify(embedded).replace(/</g, "\\u003c");
   return readFileSync(TEMPLATE, "utf8")
     .replace("/*SCRIPT*/", () => reportScript())
     .replace("/*DATA*/", () => data);

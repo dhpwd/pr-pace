@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, describe, test } from "node:test";
 import { repoNames } from "../src/repos.js";
@@ -350,6 +350,25 @@ describe("reverts", () => {
     assert.equal(pr(result, 2).reverted_by, late);
     assert.equal(pr(result, 3).is_revert, true);
   });
+
+  test("a git revert pushed straight to the branch marks the PR it names, and stays uncounted", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    const original = repo.squash(12, "Add caching", {
+      files: { "cache.js": "c\n" },
+    });
+    const revert = repo.commit(
+      `Revert "Add caching (#12)"\n\nThis reverts commit ${original}.`,
+      { files: { "cache.js": null } },
+    );
+    const result = scanRepo(repo);
+    assert.deepEqual(
+      result.prs.map((row) => row.number),
+      [12],
+    );
+    assert.equal(pr(result, 12).reverted_by, revert);
+    assert.equal(result.repos[0].direct_commits_ignored, 2);
+  });
 });
 
 describe("default branch", () => {
@@ -397,6 +416,43 @@ describe("default branch", () => {
     const overridden = scanRepo(repo, { branch: "develop" });
     assert.equal(overridden.repos[0].branch, "develop");
     assert.equal(overridden.prs.length, 1);
+  });
+
+  test("a repo git can't read is skipped with git's error, not a --branch hint", () => {
+    const dir = join(root, "broken-worktree");
+    mkdirSync(dir);
+    writeFileSync(
+      join(dir, ".git"),
+      `gitdir: ${join(root, "deleted-gitdir")}\n`,
+    );
+    for (const branch of [null, "main"]) {
+      const [warning] = scanRepo(/** @type {Repo} */ ({ dir }), { branch })
+        .repos[0].warnings;
+      assert.match(warning, /^skipped: git can't read this repo \(fatal: /);
+      assert.doesNotMatch(warning, /--branch/);
+    }
+  });
+
+  test("--fetch fetches origin, even when the branch tracks another remote", () => {
+    const origin = newRepo();
+    origin.commit("Initial commit");
+    origin.squash(1, "First", { files: { "a.js": "a\n" } });
+    const upstream = newRepo();
+    upstream.commit("Unrelated start");
+    const work = join(root, "fork-work");
+    origin.git("clone", "-q", origin.dir, work);
+    const clone = /** @type {Repo} */ ({ dir: work });
+    origin.git("-C", work, "remote", "add", "upstream", upstream.dir);
+    origin.git("-C", work, "fetch", "-q", "upstream");
+    origin.git("-C", work, "branch", "-q", "-u", "upstream/main");
+    origin.squash(2, "Second", { files: { "b.js": "b\n" } });
+    assert.equal(scanRepo(clone, { allAuthors: true }).prs.length, 1);
+    const fetched = scanRepo(clone, { allAuthors: true, fetch: true });
+    assert.deepEqual(fetched.repos[0].warnings, []);
+    assert.deepEqual(
+      fetched.prs.map((row) => row.number),
+      [1, 2],
+    );
   });
 });
 
@@ -544,6 +600,11 @@ describe("authors", () => {
       [3],
     );
     assert.deepEqual(byName.options.authors, ["other person"]);
+    const asListed = scanRepo(repo, { authors: ["Dev One <DEV@example.com>"] });
+    assert.deepEqual(
+      asListed.prs.map((row) => row.number),
+      [1, 2],
+    );
   });
 
   test("--all-authors counts everyone and lists no authors", () => {
@@ -606,6 +667,7 @@ describe("JSON output", () => {
       authors: [DEV.email],
       all_authors: false,
       include_docs: false,
+      exclude: [],
       since: "2026-03-01",
       until: "2026-03-31",
       timezone: "Europe/London",
@@ -643,5 +705,53 @@ describe("JSON output", () => {
         [1, "2026-03-03T09:00:00+00:00"],
       ],
     );
+    assert.deepEqual(
+      scanRepo(repo, { exclude: ["*.snap", "src/gen"] }).options.exclude,
+      ["*.snap", "src/gen"],
+    );
+  });
+});
+
+describe("git environment", () => {
+  /**
+   * Runs `run` with GIT_DIR at `repo`, as a linked worktree's hooks get it.
+   * @template T
+   * @param {Repo} repo
+   * @param {() => T} run
+   */
+  function withGitDir(repo, run) {
+    process.env.GIT_DIR = join(repo.dir, ".git");
+    try {
+      return run();
+    } finally {
+      delete process.env.GIT_DIR;
+    }
+  }
+
+  test("an inherited GIT_DIR doesn't redirect the scan", () => {
+    const elsewhere = newRepo();
+    elsewhere.commit("Initial commit");
+    elsewhere.squash(1, "Elsewhere", { files: { "e.js": "e\n" } });
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    repo.squash(2, "Here", { files: { "h.js": "h\n" } });
+    const result = withGitDir(elsewhere, () => scanRepo(repo));
+    assert.deepEqual(
+      result.prs.map((row) => row.number),
+      [2],
+    );
+  });
+
+  test("an inherited GIT_DIR doesn't redirect the fixtures' git commands", () => {
+    const victim = newRepo();
+    const head = victim.commit("Initial commit");
+    const repo = withGitDir(victim, () => {
+      const made = newRepo({ email: "made@example.com" });
+      made.commit("Made here");
+      return made;
+    });
+    assert.equal(victim.rev("HEAD"), head);
+    assert.equal(victim.git("config", "user.email"), DEV.email);
+    assert.equal(repo.git("log", "-1", "--format=%s"), "Made here");
   });
 });

@@ -31,13 +31,14 @@ Options
 
 const SCAN_OPTIONS_HELP = `  --depth <n>             How many folder levels below a path to look for
                           repos (default: 1)
-  --fetch                 Run git fetch in each repo first. The only option
-                          that writes to the scanned repos
+  --fetch                 Run git fetch origin in each repo first. The only
+                          option that writes to the scanned repos
   --branch <name>         Use this branch in every repo instead of detecting
                           each repo's default branch
   --author <email|name>   Count only this author: exact match, ignoring case,
-                          after .mailmap. Repeatable. Default: each repo's
-                          git config user.email
+                          after .mailmap. "Name <email>" matches by email.
+                          Repeatable. Default: each repo's git config
+                          user.email
   --all-authors           Count every author (for team breakdowns)
   --since <date>          Only PRs merged on or after this date
   --until <date>          Only PRs merged on or before this date. A bare date
@@ -257,6 +258,18 @@ function writeOutput(file, content) {
   }
 }
 
+/**
+ * @param {string} file
+ * @param {import('./scan.js').ScanResult} result
+ */
+function printWritten(file, result) {
+  const prs = result.prs.length;
+  const repos = result.repos.length;
+  process.stderr.write(
+    `pr-velocity: wrote ${file} – ${prs} PR${prs === 1 ? "" : "s"} from ${repos} repo${repos === 1 ? "" : "s"}\n`,
+  );
+}
+
 /** @param {string} file */
 function openInBrowser(file) {
   /** @type {[string, string[]]} */
@@ -285,9 +298,7 @@ function runScan(values, positionals) {
   const json = `${JSON.stringify(result, null, 2)}\n`;
   if (typeof values.out === "string") {
     writeOutput(values.out, json);
-    process.stderr.write(
-      `pr-velocity: wrote ${values.out} – ${result.prs.length} PRs from ${result.repos.length} repos\n`,
-    );
+    printWritten(values.out, result);
   } else {
     process.stdout.write(json);
   }
@@ -320,9 +331,7 @@ function runReport(values, positionals) {
   }
   const out = typeof values.out === "string" ? values.out : "pr-velocity.html";
   writeOutput(out, renderReport(result));
-  process.stderr.write(
-    `pr-velocity: wrote ${out} – ${result.prs.length} PRs from ${result.repos.length} repos\n`,
-  );
+  printWritten(out, result);
   if (values.open) openInBrowser(resolve(out));
 }
 
