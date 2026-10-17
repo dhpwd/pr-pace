@@ -16,6 +16,8 @@
 
 **Anti-pattern.** Spreading `process.env` into a git spawn. The test fixtures spawn git too and start from `repoFreeEnv()` for the same reason: under a hook, they would otherwise write commits and config into the real repo.
 
+**When to use.** Any code that spawns git, in `src/` or the tests.
+
 ## Batching inside the process budget
 
 **Problem.** The per-repo git budget in `.claude/CLAUDE.md` allows no process per commit, but merge PRs need their branch tips' authors and every changed path needs its linguist attributes.
