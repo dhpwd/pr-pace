@@ -323,9 +323,11 @@ function mapEmails(repoPath, emails) {
 function authorFilter(repoPath, options, warnings) {
   if (options.allAuthors) return { matches: () => true, defaultEmail: null };
   if (options.authors.length > 0) {
-    // "Name <email>", as the no-match warning lists authors, matches by email.
+    // "Name <email> (count)", as the no-match warning lists authors, matches
+    // by email.
     const values = options.authors.map(
-      (value) => /<([^<>]*@[^<>]*)>\s*$/.exec(value)?.[1] ?? value,
+      (value) =>
+        /<([^<>]*@[^<>]*)>(?:\s*\(\d+\))?\s*$/.exec(value)?.[1] ?? value,
     );
     const emailValues = values.filter((value) => value.includes("@"));
     const emails = new Set(
@@ -472,15 +474,10 @@ function scanRepo(repoPath, name, options, excludePath, formatter) {
   /** @type {{ repo: RepoResult, prs: { time: number, result: PrResult }[], directShas: string[], defaultEmail: string | null }} */
   const empty = { repo, prs: [], directShas: [], defaultEmail: null };
 
-  if (options.fetch) {
-    // Branch resolution reads origin/*, whichever remote the branch tracks.
-    const fetched = git(repoPath, ["fetch", "--quiet", "origin"]);
-    if (!fetched.ok) {
-      warnings.push(
-        `git fetch failed (${fetched.error}) – scanned the local copy as it is`,
-      );
-    }
-  }
+  // Every remote: the branch read is origin/* or a --branch on any remote.
+  const fetched = options.fetch
+    ? git(repoPath, ["fetch", "--quiet", "--all"])
+    : null;
 
   const branch = resolveBranch(repoPath, options.branch);
   if ("error" in branch) {
@@ -488,6 +485,11 @@ function scanRepo(repoPath, name, options, excludePath, formatter) {
     return empty;
   }
   repo.branch = branch.name;
+  if (fetched && !fetched.ok) {
+    warnings.push(
+      `git fetch failed (${fetched.error}) – scanned the local copy as it is`,
+    );
+  }
 
   const log = git(repoPath, [
     "log",

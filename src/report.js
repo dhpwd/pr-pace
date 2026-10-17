@@ -27,8 +27,7 @@ function reportScript() {
  * @param {import('./scan.js').ScanResult} scan
  */
 export function renderReport(scan) {
-  // The report shows neither repos' paths nor their warnings, and both can
-  // carry local folder names into a file that gets sent around.
+  // Repos' paths and warnings stay out – see "HTML report" in docs/specs/v1.md.
   const embedded = {
     ...scan,
     repos: scan.repos.map(({ name, branch, prs, direct_commits_ignored }) => ({

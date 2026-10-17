@@ -315,11 +315,19 @@ describe("HTML report", () => {
     );
     assert.match(
       line({ include_docs: true, exclude: ["*.snap", "src/gen"] }),
-      /lines leave out lockfiles, generated files, \*\.snap and src\/gen$/,
+      /lines leave out lockfiles, generated files, "\*\.snap" and "src\/gen"$/,
     );
     assert.match(
       line({ authors: [] }),
       /no PRs counted, as no repo that could be scanned has git user\.email set/,
+    );
+    const skipped = scan.repos.map((repo) => ({ ...repo, branch: null }));
+    assert.match(
+      metaLine(
+        { ...scan, repos: skipped, options: { ...scan.options, authors: [] } },
+        "2026-10-17",
+      ),
+      /no PRs counted, as no repo could be scanned – the scan's warnings say why/,
     );
   });
 

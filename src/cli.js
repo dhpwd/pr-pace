@@ -31,7 +31,7 @@ Options
 
 const SCAN_OPTIONS_HELP = `  --depth <n>             How many folder levels below a path to look for
                           repos (default: 1)
-  --fetch                 Run git fetch origin in each repo first. The only
+  --fetch                 Run git fetch --all in each repo first. The only
                           option that writes to the scanned repos
   --branch <name>         Use this branch in every repo instead of detecting
                           each repo's default branch

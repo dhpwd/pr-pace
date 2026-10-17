@@ -426,14 +426,22 @@ describe("default branch", () => {
       `gitdir: ${join(root, "deleted-gitdir")}\n`,
     );
     for (const branch of [null, "main"]) {
-      const [warning] = scanRepo(/** @type {Repo} */ ({ dir }), { branch })
-        .repos[0].warnings;
-      assert.match(warning, /^skipped: git can't read this repo \(fatal: /);
-      assert.doesNotMatch(warning, /--branch/);
+      for (const fetch of [false, true]) {
+        const { warnings } = scanRepo(/** @type {Repo} */ ({ dir }), {
+          branch,
+          fetch,
+        }).repos[0];
+        assert.equal(warnings.length, 1);
+        assert.match(
+          warnings[0],
+          /^skipped: git can't read this repo \(fatal: /,
+        );
+        assert.doesNotMatch(warnings[0], /--branch/);
+      }
     }
   });
 
-  test("--fetch fetches origin, even when the branch tracks another remote", () => {
+  test("--fetch fetches every remote, and a repo with none fetches without a warning", () => {
     const origin = newRepo();
     origin.commit("Initial commit");
     origin.squash(1, "First", { files: { "a.js": "a\n" } });
@@ -453,6 +461,20 @@ describe("default branch", () => {
       fetched.prs.map((row) => row.number),
       [1, 2],
     );
+    assert.deepEqual(scanRepo(origin, { fetch: true }).repos[0].warnings, []);
+  });
+
+  test("a broken .git folder inside another repo is skipped, not read as the outer repo", () => {
+    const outer = newRepo();
+    outer.commit("Initial commit");
+    outer.squash(9, "Outer work", { files: { "a.js": "a\n" } });
+    const inner = join(outer.dir, "vendor", "inner");
+    mkdirSync(join(inner, ".git"), { recursive: true });
+    const result = scanRepo(/** @type {Repo} */ ({ dir: inner }), {
+      allAuthors: true,
+    });
+    assert.deepEqual(result.prs, []);
+    assert.match(result.repos[0].warnings[0], /^skipped: git can't read/);
   });
 });
 
@@ -600,11 +622,15 @@ describe("authors", () => {
       [3],
     );
     assert.deepEqual(byName.options.authors, ["other person"]);
-    const asListed = scanRepo(repo, { authors: ["Dev One <DEV@example.com>"] });
-    assert.deepEqual(
-      asListed.prs.map((row) => row.number),
-      [1, 2],
-    );
+    for (const listed of [
+      "Dev One <DEV@example.com>",
+      "Dev One <dev@example.com> (2)",
+    ]) {
+      assert.deepEqual(
+        scanRepo(repo, { authors: [listed] }).prs.map((row) => row.number),
+        [1, 2],
+      );
+    }
   });
 
   test("--all-authors counts everyone and lists no authors", () => {
@@ -663,6 +689,15 @@ describe("JSON output", () => {
       "prs",
     ]);
     assert.equal(result.generated_at, "2026-10-17T21:00:00+01:00");
+    assert.deepEqual(Object.keys(result.options), [
+      "authors",
+      "all_authors",
+      "include_docs",
+      "exclude",
+      "since",
+      "until",
+      "timezone",
+    ]);
     assert.deepEqual(result.options, {
       authors: [DEV.email],
       all_authors: false,
@@ -753,5 +788,31 @@ describe("git environment", () => {
     assert.equal(victim.rev("HEAD"), head);
     assert.equal(victim.git("config", "user.email"), DEV.email);
     assert.equal(repo.git("log", "-1", "--format=%s"), "Made here");
+  });
+
+  test("config passed in the environment still reaches git", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    repo.squash(1, "Mine", { files: { "a.js": "a\n" } });
+    repo.squash(2, "Theirs", { author: OTHER, files: { "b.js": "b\n" } });
+    Object.assign(process.env, {
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: "user.email",
+      GIT_CONFIG_VALUE_0: OTHER.email,
+    });
+    try {
+      assert.deepEqual(
+        scanRepo(repo).prs.map((row) => row.number),
+        [2],
+      );
+    } finally {
+      for (const name of [
+        "GIT_CONFIG_COUNT",
+        "GIT_CONFIG_KEY_0",
+        "GIT_CONFIG_VALUE_0",
+      ]) {
+        delete process.env[name];
+      }
+    }
   });
 });

@@ -1,18 +1,14 @@
 import { spawnSync } from "node:child_process";
+import { dirname } from "node:path";
 
 /**
  * @typedef {{ ok: boolean, stdout: string, error: string }} GitResult `error` is stderr's first line, for warnings
  */
 
-// The variables that tie git to one repo, as listed by `git rev-parse
-// --local-env-vars`. Hooks in a linked worktree get absolute GIT_DIR and
-// GIT_INDEX_FILE, and tools such as vcsh set GIT_DIR. Left in place, they
-// make every scanned path read that one repo.
+// `git rev-parse --local-env-vars` without its config variables – see
+// docs/patterns/git.md.
 const REPO_ENV = [
   "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-  "GIT_CONFIG",
-  "GIT_CONFIG_PARAMETERS",
-  "GIT_CONFIG_COUNT",
   "GIT_OBJECT_DIRECTORY",
   "GIT_DIR",
   "GIT_WORK_TREE",
@@ -53,7 +49,11 @@ export function git(cwd, args, options = {}) {
         input: options.input,
         encoding: "utf8",
         maxBuffer: Infinity,
-        env: { ...repoFreeEnv(), GIT_TERMINAL_PROMPT: "0" },
+        env: {
+          ...repoFreeEnv(),
+          GIT_TERMINAL_PROMPT: "0",
+          GIT_CEILING_DIRECTORIES: dirname(cwd),
+        },
       },
     );
   } catch (error) {

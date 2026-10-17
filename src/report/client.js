@@ -313,10 +313,8 @@ export function byId(id) {
 }
 
 /**
- * The storage key for remembered controls. Reports share one origin when
- * opened from disk, so each set of scanned repos gets its own key: a new
- * report on the same repos keeps the controls, and one on other repos starts
- * from the defaults.
+ * The storage key for remembered controls, one per set of scanned repo names
+ * – see "HTML report" in docs/specs/v1.md.
  * @param {ScanResult} scan
  */
 export function viewKey(scan) {
@@ -815,12 +813,15 @@ export function metaLine(scan, generatedDay) {
     ? "all authors"
     : options.authors.length > 0
       ? options.authors.join(", ")
-      : "no PRs counted, as no repo that could be scanned has git user.email set";
+      : scan.repos.every((repo) => repo.branch === null)
+        ? "no PRs counted, as no repo could be scanned – the scan's warnings say why"
+        : "no PRs counted, as no repo that could be scanned has git user.email set";
   const left = [
     ...(options.include_docs ? [] : ["docs"]),
     "lockfiles",
     "generated files",
-    ...(options.exclude ?? []),
+    // Scans saved before `exclude` was recorded have none.
+    ...(options.exclude ?? []).map((glob) => `"${glob}"`),
   ];
   const leftOut = `${left.slice(0, -1).join(", ")} and ${left[left.length - 1]}`;
   const repos = scan.repos.length;
