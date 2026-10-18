@@ -2,24 +2,6 @@ const DOC_EXTENSIONS = [".md", ".mdx", ".markdown", ".rst", ".adoc", ".txt"];
 
 const CONFIG_TXT_NAMES = new Set(["cmakelists.txt", "robots.txt"]);
 
-/**
- * A `.txt` file that is config, not docs, so the docs exclusion skips it: a
- * pip requirements or constraints file, anything under a `requirements/`
- * folder at any depth, or a name in CONFIG_TXT_NAMES. Matched ignoring case.
- * @param {string[]} segments
- */
-function isConfigTxt(segments) {
-  const lower = segments.map((segment) => segment.toLowerCase());
-  const name = lower[lower.length - 1];
-  return (
-    name.endsWith(".txt") &&
-    (CONFIG_TXT_NAMES.has(name) ||
-      name.includes("requirements") ||
-      name.includes("constraints") ||
-      lower.slice(0, -1).includes("requirements"))
-  );
-}
-
 const LOCKFILES = new Set([
   "package-lock.json",
   "yarn.lock",
@@ -97,6 +79,24 @@ export function globMatcher(glob) {
     }
     return false;
   };
+}
+
+/**
+ * Whether a `.txt` file is config rather than docs, so the docs exclusion
+ * skips it – the rule is under "Lines changed" in docs/specs/v1.md.
+ * @param {string[]} segments
+ */
+function isConfigTxt(segments) {
+  const name = segments[segments.length - 1].toLowerCase();
+  if (!name.endsWith(".txt")) return false;
+  return (
+    CONFIG_TXT_NAMES.has(name) ||
+    name.includes("requirements") ||
+    name.includes("constraints") ||
+    segments
+      .slice(0, -1)
+      .some((segment) => segment.toLowerCase() === "requirements")
+  );
 }
 
 /**
