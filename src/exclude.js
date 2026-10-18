@@ -1,5 +1,7 @@
 const DOC_EXTENSIONS = [".md", ".mdx", ".markdown", ".rst", ".adoc", ".txt"];
 
+const CONFIG_TXT_NAMES = new Set(["cmakelists.txt", "robots.txt"]);
+
 const LOCKFILES = new Set([
   "package-lock.json",
   "yarn.lock",
@@ -80,6 +82,24 @@ export function globMatcher(glob) {
 }
 
 /**
+ * Whether a `.txt` file is config rather than docs, so the docs exclusion
+ * skips it – the rule is under "Lines changed" in docs/specs/v1.md.
+ * @param {string[]} segments
+ */
+function isConfigTxt(segments) {
+  const name = segments[segments.length - 1].toLowerCase();
+  if (!name.endsWith(".txt")) return false;
+  return (
+    CONFIG_TXT_NAMES.has(name) ||
+    name.includes("requirements") ||
+    name.includes("constraints") ||
+    segments
+      .slice(0, -1)
+      .some((segment) => segment.toLowerCase() === "requirements")
+  );
+}
+
+/**
  * Builds the path test for the default exclusions plus any `--exclude` globs.
  * Linguist attributes are checked separately, from git.
  * @param {{ includeDocs: boolean, globs: string[] }} options
@@ -91,7 +111,11 @@ export function pathExcluder({ includeDocs, globs }) {
     const segments = path.split("/");
     const name = segments[segments.length - 1];
     const lower = name.toLowerCase();
-    if (!includeDocs && DOC_EXTENSIONS.some((ext) => lower.endsWith(ext))) {
+    if (
+      !includeDocs &&
+      DOC_EXTENSIONS.some((ext) => lower.endsWith(ext)) &&
+      !isConfigTxt(segments)
+    ) {
       return true;
     }
     if (LOCKFILES.has(name)) return true;

@@ -33,6 +33,46 @@ describe("default exclusions", () => {
     }
   });
 
+  test("count config .txt files and leave out prose .txt files", () => {
+    for (const path of [
+      "requirements.txt",
+      "requirements-dev.txt",
+      "dev-requirements.txt",
+      "requirements_test.txt",
+      "constraints.txt",
+      "requirements/base.txt",
+      "app/requirements/dev.txt",
+      "requirements/ci/py311.txt",
+      "CMakeLists.txt",
+      "src/lib/CMakeLists.txt",
+      "robots.txt",
+      "public/robots.txt",
+      "REQUIREMENTS.TXT",
+    ]) {
+      assert.equal(excluded(path), false, path);
+    }
+    for (const path of [
+      "notes.txt",
+      "LICENSE.txt",
+      "CHANGELOG.txt",
+      "llms.txt",
+      "public/llms-full.txt",
+      "docs/guide.TXT",
+      "requirements.md",
+      "requirements/README.md",
+    ]) {
+      assert.equal(excluded(path), true, path);
+    }
+  });
+
+  test("config .txt files under build output or an --exclude glob stay excluded", () => {
+    assert.equal(excluded("node_modules/x/requirements.txt"), true);
+    assert.equal(excluded("vendor/CMakeLists.txt"), true);
+    const globbed = pathExcluder({ includeDocs: false, globs: ["robots.txt"] });
+    assert.equal(globbed("robots.txt"), true);
+    assert.equal(globbed("public/robots.txt"), true);
+  });
+
   test("--include-docs drops only the docs exclusion", () => {
     const withDocs = pathExcluder({ includeDocs: true, globs: [] });
     assert.equal(withDocs("README.md"), false);
