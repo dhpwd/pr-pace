@@ -223,6 +223,7 @@ describe("report figures", () => {
       "12m",
     );
     assert.equal(load({ split: "author" }).split, "none");
+    assert.equal(load({ metric: "score" }).metric, "prs");
   });
 
   test("controls are remembered per set of scanned repos", () => {
@@ -273,12 +274,16 @@ describe("report figures", () => {
       "reverts",
     ])) {
       for (const max of [
-        0.004, 0.012, 0.02, 0.03, 0.07, 0.15, 0.3, 1, 1.5, 3, 7, 208.5,
+        0.004, 0.012, 0.02, 0.03, 0.07, 0.15, 0.3, 0.5, 1, 1.5, 3, 7, 208.5,
       ]) {
         if (metric === "reverts" && max > 1) continue;
         // Every bar is a whole number of lines, so a chart's largest is 0 or 1+.
         if (metric === "lines" && max < 1) continue;
         const { step, max: top } = niceTicks(max, metric);
+        // PRs and median PR size never tick on a fraction.
+        if (metric === "prs" || metric === "median") {
+          assert.ok(Number.isInteger(step), `${metric} ${max}`);
+        }
         const labels = [];
         for (let value = 0; value <= top + 1e-9; value += step) {
           labels.push(formatMetric(value, metric, true));

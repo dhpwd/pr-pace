@@ -30,7 +30,7 @@ import {
 
 /**
  * A PR's size-weighted count, from its lines rather than the scan's rounded
- * `weighted_prs`, so totals sum unrounded values.
+ * `weighted_prs` – see "Lines changed" in docs/specs/v1.md.
  * @param {number} lines
  */
 export function weightOf(lines) {
@@ -263,7 +263,7 @@ export function formatMetric(value, metric, compact = false) {
     return `${formatNumber(short, Number.isInteger(short) ? 0 : 1)}${suffix}`;
   }
   if (metric === "weighted" && !compact) return formatNumber(value, 2);
-  // Whole lines, half up: an even count can give a median of 208.5.
+  // Whole lines, half up – see "HTML report" in docs/specs/v1.md.
   if (metric === "median" && !compact) return formatNumber(Math.round(value));
   return formatNumber(value, Number.isInteger(value) ? 0 : 1);
 }
