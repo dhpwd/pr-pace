@@ -35,7 +35,7 @@ function row(fields) {
     removed: 0,
     lines: 10,
     excluded_lines: 0,
-    score: 3.16,
+    weighted_prs: 0.316,
     is_revert: false,
     reverted_by: null,
     day: "2026-10-05",
@@ -47,11 +47,80 @@ function row(fields) {
 describe("report figures", () => {
   test("totals leave out revert PRs and count reverted originals", () => {
     const totals = totalsOf([
-      row({ lines: 10, score: 3.16 }),
-      row({ lines: 4, score: 2, reverted_by: "abc" }),
-      row({ lines: 100, score: 10, is_revert: true }),
+      row({ lines: 100 }),
+      row({ lines: 400, reverted_by: "abc" }),
+      row({ lines: 900, is_revert: true }),
     ]);
-    assert.deepEqual(totals, { count: 2, lines: 14, score: 5.16, reverted: 1 });
+    assert.deepEqual(totals, {
+      count: 2,
+      weighted: 3,
+      median: 250,
+      lines: 500,
+      reverted: 1,
+    });
+  });
+
+  test("weighted PRs sum √(lines ÷ 100) from lines, not the scan's rounded field", () => {
+    const rows = Array.from({ length: 300 }, () =>
+      row({ lines: 154, weighted_prs: 1.241 }),
+    );
+    const weighted = totalsOf(rows).weighted;
+    assert.ok(Math.abs(weighted - 300 * Math.sqrt(1.54)) < 1e-9);
+    assert.equal(formatMetric(weighted, "weighted"), "372.29");
+    assert.equal(formatMetric(1, "weighted"), "1.00");
+  });
+
+  test("median PR size: even counts, gaps, pooled averages, docs-only PRs and series side by side", () => {
+    const rows = [
+      row({ day: "2026-10-01", repo: "a", lines: 10 }),
+      row({ day: "2026-10-01", repo: "b", lines: 30 }),
+      row({ day: "2026-10-02", repo: "a", lines: 0 }),
+      row({ day: "2026-10-02", repo: "a", lines: 5 }),
+      row({ day: "2026-10-02", repo: "b", lines: 100, reverted_by: "x" }),
+      row({ day: "2026-10-02", repo: "b", lines: 1000, is_revert: true }),
+      row({ day: "2026-10-04", repo: "a", lines: 7 }),
+      row({ day: "2026-10-05", repo: "a", lines: 1 }),
+    ];
+    const keys = [
+      "2026-10-01",
+      "2026-10-02",
+      "2026-10-03",
+      "2026-10-04",
+      "2026-10-05",
+    ];
+    const series = assignSeries(
+      rows,
+      (r) => r.repo,
+      (r) => r.repo,
+    );
+    const seriesOf = (/** @type {import('../src/report/client.js').Row} */ r) =>
+      series.get(r.repo) ?? {
+        key: "__other",
+        label: "Other",
+        colour: "",
+        rank: Infinity,
+      };
+    const median = chartModel(rows, keys, "day", "median", seriesOf);
+    // The docs-only PR counts at 0 lines, and the revert PR is left out.
+    assert.deepEqual(
+      median.columns.map((c) => c.value),
+      [20, 5, null, 7, 1],
+    );
+    assert.deepEqual(
+      median.columns[0].parts.map((p) => p.value),
+      [10, 30],
+    );
+    // The median of every PR across the four periods, not of their medians.
+    assert.deepEqual(
+      median.columns.map((c) => c.average),
+      [null, null, null, 8.5, 5],
+    );
+    // The range's median is over all its PRs, not an average of periods.
+    assert.equal(totalsOf(rows).median, 7);
+    assert.equal(totalsOf([]).median, null);
+    assert.equal(formatMetric(8.5, "median"), "9");
+    assert.equal(formatMetric(208.5, "median"), "209");
+    assert.equal(formatMetric(null, "median"), "–");
   });
 
   test("each column's parts add up to its total, and revert rate is reverted ÷ PRs", () => {
@@ -196,9 +265,19 @@ describe("report figures", () => {
   });
 
   test("axis ticks never repeat a label", () => {
-    for (const metric of /** @type {const} */ (["prs", "reverts"])) {
-      for (const max of [0.004, 0.012, 0.02, 0.03, 0.07, 0.3, 1, 3, 7]) {
+    for (const metric of /** @type {const} */ ([
+      "prs",
+      "weighted",
+      "median",
+      "lines",
+      "reverts",
+    ])) {
+      for (const max of [
+        0.004, 0.012, 0.02, 0.03, 0.07, 0.15, 0.3, 1, 1.5, 3, 7, 208.5,
+      ]) {
         if (metric === "reverts" && max > 1) continue;
+        // Every bar is a whole number of lines, so a chart's largest is 0 or 1+.
+        if (metric === "lines" && max < 1) continue;
         const { step, max: top } = niceTicks(max, metric);
         const labels = [];
         for (let value = 0; value <= top + 1e-9; value += step) {

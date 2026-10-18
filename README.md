@@ -2,12 +2,15 @@
 
 Measure PR velocity from local git history: how many pull requests a person lands, how big they are and how often they get reverted, over time. Point it at one repo or a folder of repos and it writes JSON or a self-contained HTML report.
 
-It counts merged PRs on each repo's default branch – squash merges and merge commits, using GitHub and GitLab conventions – and reports four figures per day, week or month:
+It counts merged PRs on each repo's default branch – squash merges and merge commits, using GitHub and GitLab conventions – and reports five figures per day, week or month:
 
 - **PRs** – merged PRs, leaving out revert PRs
+- **Size-weighted PRs** – PRs adjusted for size. Each PR counts √(lines ÷ 100), so a 100-line PR counts 1, a 400-line PR 2 and a 25-line PR 0.5
+- **Median PR size** – lines changed by the middle PR. It's context for reading PRs and size-weighted PRs (did PRs get bigger or smaller?), not a target
 - **Lines changed** – added + removed, leaving out docs, lockfiles, build output and files `.gitattributes` marks as generated
-- **Score** – √lines per PR, summed, so size counts without one huge PR dominating
 - **Revert rate** – the share of PRs later reverted
+
+Size-weighted PRs rest on a convention, not a measured law: the 100-line reference is fixed rather than taken from your data, so figures compare between people and over time. They work best for tracking one team over time. Comparing teams across languages or stacks misleads, because a line carries a different amount of work in each and the default exclusions shape the number.
 
 Everything is read from local history, so no token or API access is needed.
 

@@ -41,7 +41,7 @@ import { formatInstant, zoneFormatter } from "./time.js";
  * @property {number} removed
  * @property {number} lines
  * @property {number} excluded_lines
- * @property {number} score
+ * @property {number} weighted_prs
  * @property {boolean} is_revert
  * @property {string | null} reverted_by
  *
@@ -607,7 +607,7 @@ function toResult(pr, repoName, isExcluded, formatter) {
     removed,
     lines,
     excluded_lines: excluded,
-    score: Math.round(Math.sqrt(lines) * 100) / 100,
+    weighted_prs: Math.round(Math.sqrt(lines / 100) * 1000) / 1000,
     is_revert: pr.isRevert,
     reverted_by: pr.revertedBy,
   };

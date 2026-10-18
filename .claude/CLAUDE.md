@@ -1,6 +1,6 @@
 # pr-velocity
 
-A Node CLI that measures PR velocity from local git history – PR count, lines changed, a combined score and revert rate per person over time. It scans one repo or a folder of repos and writes JSON (`scan`) or a self-contained HTML report (`report`).
+A Node CLI that measures PR velocity from local git history – PR count, size-weighted PRs, median PR size, lines changed and revert rate per person over time. It scans one repo or a folder of repos and writes JSON (`scan`) or a self-contained HTML report (`report`).
 
 @~/Workspace/cli-agents/shared/coding.md
 
@@ -13,7 +13,7 @@ A Node CLI that measures PR velocity from local git history – PR count, lines 
 - Git process budget per repo: the per-commit work is one `git log --first-parent --diff-merges=first-parent --numstat -M` call, one batched call for second-parent authors and one `git check-attr --stdin`. A fixed number of setup calls sits outside it – `git config user.email`, default-branch resolution, `git check-mailmap` and `git fetch` under `--fetch`. Never spawn a process per commit
 - Read-only against scanned repos – `--fetch` is the only option that writes to them
 - The HTML report is one file: embedded scan JSON, inline SVG charts, vanilla JS, no external requests. It must work offline and as a message attachment
-- The spec's design decisions define what the numbers mean (unit of work, first-parent walk, line exclusions, √lines score, revert handling). Raise a change to any of them as a design decision before implementing it
+- The spec's design decisions define what the numbers mean (unit of work, first-parent walk, line exclusions, size-weighted PRs, median PR size, revert handling). Raise a change to any of them as a design decision before implementing it
 
 ## Commands
 
@@ -31,7 +31,7 @@ A Node CLI that measures PR velocity from local git history – PR count, lines 
 ### Full verify (at completion)
 
 1. Preflight
-2. If report code changed: build throwaway fixture repos as the tests do and generate a report from them into a scratch folder outside the repo. Serve it with `python3 -m http.server --bind 127.0.0.1 <port>` and open it over `http://127.0.0.1` (Playwright blocks `file://`). Switch through each period, metric and split, click a bar and confirm the listed PRs add up to the bar's value, and confirm `browser_network_requests` shows no request beyond the page itself
+2. If report code changed: build throwaway fixture repos as the tests do and generate a report from them into a scratch folder outside the repo. Serve it with `python3 -m http.server --bind 127.0.0.1 <port>` and open it over `http://127.0.0.1` (Playwright blocks `file://`). Switch through each period, metric and split, click a bar and confirm the listed PRs reproduce the bar's value (sum, rate or median), check the controls and tiles are readable and tappable with no horizontal scroll at phone width (about 375px), and confirm `browser_network_requests` shows no request beyond the page itself
 
 ## Pattern index
 
