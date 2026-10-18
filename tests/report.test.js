@@ -70,7 +70,7 @@ describe("report figures", () => {
     assert.equal(formatMetric(1, "weighted"), "1.00");
   });
 
-  test("median PR size: even counts, gaps, pooled averages, docs-only PRs and series side by side", () => {
+  test("median PR size: even counts, gaps, pooled averages, docs-only PRs and per-series medians", () => {
     const rows = [
       row({ day: "2026-10-01", repo: "a", lines: 10 }),
       row({ day: "2026-10-01", repo: "b", lines: 30 }),
@@ -223,7 +223,8 @@ describe("report figures", () => {
       "12m",
     );
     assert.equal(load({ split: "author" }).split, "none");
-    assert.equal(load({ metric: "score" }).metric, "prs");
+    // A metric an older report offered and this one doesn't.
+    assert.equal(load({ metric: "retired" }).metric, "prs");
   });
 
   test("controls are remembered per set of scanned repos", () => {

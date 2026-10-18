@@ -466,7 +466,8 @@ export function drawChart(
   const plotWidth = width - margin.left - margin.right;
   const plotHeight = height - margin.top - margin.bottom;
   const slot = plotWidth / columns.length;
-  // Rates don't stack, and series medians don't add up to the period's median.
+  // Revert rate and median PR size don't stack – see "HTML report" in
+  // docs/specs/v1.md.
   const sideBySide =
     (metric === "reverts" || metric === "median") && series.length > 0;
 
@@ -644,7 +645,7 @@ export function drawChart(
       tooltip.append(
         h("div", { class: "tt-row" }, [
           h("span", { class: "line-key", style: "background:var(--average)" }),
-          "4-period average",
+          metric === "median" ? "4-period median" : "4-period average",
           h("strong", {}, [formatMetric(column.average, metric)]),
         ]),
       );
@@ -725,7 +726,7 @@ export function drawDetails(column, period, metric, showAuthor) {
   const prs = `${t.count} PR${t.count === 1 ? "" : "s"}`;
   const figures = {
     prs,
-    weighted: `${prs} · ${formatNumber(t.weighted, 2)} weighted PRs`,
+    weighted: `${prs} · ${formatMetric(t.weighted, "weighted")} weighted PRs`,
     median:
       t.median === null
         ? prs
@@ -784,7 +785,9 @@ export function drawDetails(column, period, metric, showAuthor) {
         ]),
         ...(showAuthor ? [h("td", {}, [row.author_name])] : []),
         h("td", { class: "num" }, [formatNumber(row.lines)]),
-        h("td", { class: "num" }, [formatNumber(weightOf(row.lines), 2)]),
+        h("td", { class: "num" }, [
+          formatMetric(weightOf(row.lines), "weighted"),
+        ]),
       ]),
     ),
   );
@@ -818,9 +821,11 @@ export function drawTiles(current, previous, previousLabel) {
     const delta = h("div", { class: "tile-delta" });
     const before = previous ? metricOf(previous, spec.metric) : null;
     if (previous && value !== null && before !== null) {
-      const diff = value - before;
+      // Weighted PRs are float sums whose last bits depend on the order the
+      // PRs were added, so equal totals can differ by a rounding error.
+      const diff = Math.abs(value - before) < 1e-9 ? 0 : value - before;
       const upIsGood = spec.metric !== "reverts";
-      // Median PR size is context, not a target, so its change has no tone.
+      // Median PR size has no tone – see "HTML report" in docs/specs/v1.md.
       const tone =
         diff === 0 || spec.metric === "median"
           ? ""
@@ -1213,7 +1218,7 @@ export function main(scan) {
       legend.append(
         h("span", {}, [
           h("span", { class: "line-key", style: "background:var(--average)" }),
-          "4-period average",
+          view.metric === "median" ? "4-period median" : "4-period average",
         ]),
       );
     }
