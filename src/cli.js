@@ -18,9 +18,9 @@ Usage
   pr-velocity scan [path...] [options]     Write the scan result as JSON
   pr-velocity report [path...] [options]   Write a self-contained HTML report
 
-Counts merged pull requests on each repo's default branch – PR count, lines
-changed, a combined score (√lines per PR, summed) and revert rate – for one
-repo or a folder of repos.
+Counts merged pull requests on each repo's default branch – PR count,
+size-weighted PRs (each PR counts √(lines ÷ 100)), median PR size, lines
+changed and revert rate – for one repo or a folder of repos.
 
 Run pr-velocity <command> --help for each command's options.
 
@@ -78,10 +78,10 @@ Examples
 
 const REPORT_HELP = `Usage: pr-velocity report [path...] [options]
 
-Scan, then write a self-contained HTML report: charts of PRs, lines changed,
-score and revert rate by day, week or month, with a list of the PRs behind
-each bar. The file makes no network requests, so it works offline and as an
-attachment.
+Scan, then write a self-contained HTML report: charts of PRs, size-weighted
+PRs, median PR size, lines changed and revert rate by day, week or month, with
+a list of the PRs behind each bar. The file makes no network requests, so it
+works offline and as an attachment.
 
 Options
   --from <scan.json>      Build the report from a saved scan instead of

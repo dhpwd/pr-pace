@@ -214,15 +214,18 @@ describe("lines changed", () => {
     assert.equal(pr(result, 5).excluded_lines, 4);
   });
 
-  test("score is the square root of lines, to two decimals", () => {
+  test("weighted PRs are √(lines ÷ 100), to three decimals", () => {
     const repo = newRepo();
+    const lines = (/** @type {number} */ n) =>
+      Array.from({ length: n }, (_, i) => `${i}`).join("\n") + "\n";
     repo.commit("Initial commit");
-    repo.squash(6, "Add file", {
-      files: {
-        "a.js": Array.from({ length: 154 }, (_, i) => `${i}`).join("\n") + "\n",
-      },
-    });
-    assert.equal(pr(scanRepo(repo), 6).score, 12.41);
+    repo.squash(6, "Add file", { files: { "a.js": lines(154) } });
+    repo.squash(7, "Add another", { files: { "b.js": lines(100) } });
+    repo.squash(8, "Add a third", { files: { "c.js": lines(400) } });
+    const result = scanRepo(repo);
+    assert.equal(pr(result, 6).weighted_prs, 1.241);
+    assert.equal(pr(result, 7).weighted_prs, 1);
+    assert.equal(pr(result, 8).weighted_prs, 2);
   });
 });
 
@@ -729,7 +732,7 @@ describe("JSON output", () => {
       "removed",
       "lines",
       "excluded_lines",
-      "score",
+      "weighted_prs",
       "is_revert",
       "reverted_by",
     ]);
