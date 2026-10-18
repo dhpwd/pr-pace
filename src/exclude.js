@@ -1,5 +1,25 @@
 const DOC_EXTENSIONS = [".md", ".mdx", ".markdown", ".rst", ".adoc", ".txt"];
 
+const CONFIG_TXT_NAMES = new Set(["cmakelists.txt", "robots.txt"]);
+
+/**
+ * A `.txt` file that is config, not docs, so the docs exclusion skips it: a
+ * pip requirements or constraints file, anything under a `requirements/`
+ * folder at any depth, or a name in CONFIG_TXT_NAMES. Matched ignoring case.
+ * @param {string[]} segments
+ */
+function isConfigTxt(segments) {
+  const lower = segments.map((segment) => segment.toLowerCase());
+  const name = lower[lower.length - 1];
+  return (
+    name.endsWith(".txt") &&
+    (CONFIG_TXT_NAMES.has(name) ||
+      name.includes("requirements") ||
+      name.includes("constraints") ||
+      lower.slice(0, -1).includes("requirements"))
+  );
+}
+
 const LOCKFILES = new Set([
   "package-lock.json",
   "yarn.lock",
@@ -91,7 +111,11 @@ export function pathExcluder({ includeDocs, globs }) {
     const segments = path.split("/");
     const name = segments[segments.length - 1];
     const lower = name.toLowerCase();
-    if (!includeDocs && DOC_EXTENSIONS.some((ext) => lower.endsWith(ext))) {
+    if (
+      !includeDocs &&
+      DOC_EXTENSIONS.some((ext) => lower.endsWith(ext)) &&
+      !isConfigTxt(segments)
+    ) {
       return true;
     }
     if (LOCKFILES.has(name)) return true;
