@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { repoFreeEnv } from "../src/git.js";
 
 // Fixture repos must not inherit this machine's git config (template hooks,
 // a real identity), and nor must the scanner's own git calls under test.
@@ -19,7 +20,7 @@ export const MERGER = { name: "Merge Clicker", email: "merger@example.com" };
 /** @type {Identity} */
 const COMMITTER = { name: "Fixture Committer", email: "committer@example.com" };
 
-/** The scan's notional run time: Sat 17 Oct 2026, 20:00 UTC. */
+/** The scan's notional run time: Saturday 17th October 2026, 20:00 UTC. */
 export const NOW = Date.UTC(2026, 9, 17, 20);
 
 /** @param {string} prefix */
@@ -60,7 +61,7 @@ export function scanOptions(paths, overrides = {}) {
 
 /**
  * A throwaway repo on `main`, whose local git config email is `email`.
- * Commit times start at Mon 5 Jan 2026 and step forward a day per commit
+ * Commit times start at Monday 5th January 2026 and step forward a day per commit
  * unless a commit names its own date.
  */
 export class Repo {
@@ -98,7 +99,7 @@ export class Repo {
       cwd: this.dir,
       encoding: "utf8",
       env: {
-        ...process.env,
+        ...repoFreeEnv(),
         GIT_AUTHOR_NAME: author.name,
         GIT_AUTHOR_EMAIL: author.email,
         GIT_AUTHOR_DATE: date,

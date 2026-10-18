@@ -47,7 +47,7 @@ import { formatInstant, zoneFormatter } from "./time.js";
  *
  * @typedef {object} ScanResult
  * @property {string} generated_at
- * @property {{ authors: string[], all_authors: boolean, include_docs: boolean, since: string | null, until: string | null, timezone: string }} options
+ * @property {{ authors: string[], all_authors: boolean, include_docs: boolean, exclude: string[], since: string | null, until: string | null, timezone: string }} options
  * @property {RepoResult[]} repos
  * @property {PrResult[]} prs
  *
@@ -192,30 +192,45 @@ function classify(commit) {
 }
 
 /**
- * Marks revert PRs and links each to the PR it reverts. Runs over a repo's
- * whole first-parent history, oldest first, before any author or date filter.
- * @param {Pr[]} prs oldest first
+ * The earlier PR that a commit's first matching `This reverts commit <sha>`
+ * line names, by full SHA or prefix.
+ * @param {Commit} commit
+ * @param {Map<string, Pr>} bySha
  */
-function linkReverts(prs) {
+function revertedBySha(commit, bySha) {
+  for (const [, sha] of commit.message.matchAll(REVERTS_COMMIT)) {
+    const wanted = sha.toLowerCase();
+    const exact = bySha.get(wanted);
+    if (exact) return exact;
+    if (wanted.length >= commit.sha.length) continue;
+    for (const earlier of bySha.values()) {
+      if (earlier.sha.startsWith(wanted)) return earlier;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Marks revert PRs and links each revert to the PR it reverts. Runs over a
+ * repo's whole first-parent history, oldest first, before any author or date
+ * filter. A direct commit links only by SHA, which covers `git revert` pushed
+ * straight to the branch, and isn't itself counted.
+ * @param {Commit[]} commits oldest first
+ * @param {Map<string, Pr>} prsBySha the PR each PR commit was detected as
+ */
+function linkReverts(commits, prsBySha) {
   /** @type {Map<string, Pr>} */
   const bySha = new Map();
   /** @type {Map<string, Pr>} */
   const byTitle = new Map();
-  for (const pr of prs) {
-    /** @type {Pr | undefined} */
-    let original;
-    for (const [, sha] of pr.message.matchAll(REVERTS_COMMIT)) {
-      const wanted = sha.toLowerCase();
-      original = bySha.get(wanted);
-      if (!original) {
-        for (const earlier of bySha.values()) {
-          if (earlier.sha.startsWith(wanted)) {
-            original = earlier;
-            break;
-          }
-        }
+  for (const commit of commits) {
+    let original = revertedBySha(commit, bySha);
+    const pr = prsBySha.get(commit.sha);
+    if (!pr) {
+      if (original && original.revertedBy === null) {
+        original.revertedBy = commit.sha;
       }
-      if (original) break;
+      continue;
     }
     const quoted = REVERT_QUOTE.exec(pr.title)?.[1];
     if (!original && quoted !== undefined) {
@@ -227,6 +242,11 @@ function linkReverts(prs) {
     byTitle.set(stripPrSuffix(pr.subject), pr);
     byTitle.set(pr.title, pr);
   }
+}
+
+/** @param {string} error */
+function unreadable(error) {
+  return `git can't read this repo (${error}) – run git status in it to see why`;
 }
 
 /** @param {string} ref */
@@ -247,8 +267,9 @@ function resolveBranch(repoPath, override) {
       "--quiet",
       `${override}^{commit}`,
     ]);
-    return found.ok
-      ? { ref: override, name: override }
+    if (found.ok) return { ref: override, name: override };
+    return found.error
+      ? { error: unreadable(found.error) }
       : { error: `branch ${override} not found – check --branch` };
   }
   const listed = git(repoPath, [
@@ -256,6 +277,7 @@ function resolveBranch(repoPath, override) {
     "--format=%(refname)%00%(symref)",
     ...BRANCH_CANDIDATES,
   ]);
+  if (!listed.ok) return { error: unreadable(listed.error) };
   /** @type {Map<string, string>} */
   const refs = new Map();
   for (const line of listed.stdout.split("\n")) {
@@ -301,14 +323,20 @@ function mapEmails(repoPath, emails) {
 function authorFilter(repoPath, options, warnings) {
   if (options.allAuthors) return { matches: () => true, defaultEmail: null };
   if (options.authors.length > 0) {
-    const emailValues = options.authors.filter((value) => value.includes("@"));
+    // "Name <email> (count)", as the no-match warning lists authors, matches
+    // by email.
+    const values = options.authors.map(
+      (value) =>
+        /<([^<>]*@[^<>]*)>(?:\s*\(\d+\))?\s*$/.exec(value)?.[1] ?? value,
+    );
+    const emailValues = values.filter((value) => value.includes("@"));
     const emails = new Set(
       [...emailValues, ...mapEmails(repoPath, emailValues)].map((email) =>
         email.toLowerCase(),
       ),
     );
     const names = new Set(
-      options.authors
+      values
         .filter((value) => !value.includes("@"))
         .map((name) => name.toLowerCase()),
     );
@@ -446,14 +474,10 @@ function scanRepo(repoPath, name, options, excludePath, formatter) {
   /** @type {{ repo: RepoResult, prs: { time: number, result: PrResult }[], directShas: string[], defaultEmail: string | null }} */
   const empty = { repo, prs: [], directShas: [], defaultEmail: null };
 
-  if (options.fetch) {
-    const fetched = git(repoPath, ["fetch", "--quiet"]);
-    if (!fetched.ok) {
-      warnings.push(
-        `git fetch failed (${fetched.error}) – scanned the local copy as it is`,
-      );
-    }
-  }
+  // Every remote: the branch read is origin/* or a --branch on any remote.
+  const fetched = options.fetch
+    ? git(repoPath, ["fetch", "--quiet", "--all"])
+    : null;
 
   const branch = resolveBranch(repoPath, options.branch);
   if ("error" in branch) {
@@ -461,6 +485,11 @@ function scanRepo(repoPath, name, options, excludePath, formatter) {
     return empty;
   }
   repo.branch = branch.name;
+  if (fetched && !fetched.ok) {
+    warnings.push(
+      `git fetch failed (${fetched.error}) – scanned the local copy as it is`,
+    );
+  }
 
   const log = git(repoPath, [
     "log",
@@ -481,36 +510,35 @@ function scanRepo(repoPath, name, options, excludePath, formatter) {
 
   /** @type {Pr[]} */
   const allPrs = [];
+  /** @type {Map<string, Pr>} */
+  const prsBySha = new Map();
   /** @type {Commit[]} */
   const direct = [];
   for (const commit of commits) {
     const detected = classify(commit);
     if (detected) {
-      allPrs.push({
-        ...commit,
-        ...detected,
-        isRevert: false,
-        revertedBy: null,
-      });
+      /** @type {Pr} */
+      const pr = { ...commit, ...detected, isRevert: false, revertedBy: null };
+      allPrs.push(pr);
+      prsBySha.set(pr.sha, pr);
     } else {
       direct.push(commit);
     }
   }
+  linkReverts(commits, prsBySha);
 
-  applyBranchAuthors(
-    repoPath,
-    allPrs.filter((pr) => pr.method === "merge"),
-    warnings,
-  );
-  linkReverts(allPrs);
-
-  const filter = authorFilter(repoPath, options, warnings);
   /** @param {number} time */
   const inRange = (time) =>
     (options.sinceMs === null || time >= options.sinceMs) &&
     (options.untilMs === null || time < options.untilMs);
-
   const prsInRange = allPrs.filter((pr) => inRange(pr.time));
+  applyBranchAuthors(
+    repoPath,
+    prsInRange.filter((pr) => pr.method === "merge"),
+    warnings,
+  );
+
+  const filter = authorFilter(repoPath, options, warnings);
   const prs = prsInRange.filter((pr) =>
     filter.matches(pr.authorName, pr.authorEmail),
   );
@@ -668,6 +696,7 @@ export function scan(options) {
           : [...defaultEmails.values()],
       all_authors: options.allAuthors,
       include_docs: options.includeDocs,
+      exclude: [...options.exclude],
       since: options.since,
       until: options.until,
       timezone: options.timeZone,

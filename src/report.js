@@ -27,8 +27,18 @@ function reportScript() {
  * @param {import('./scan.js').ScanResult} scan
  */
 export function renderReport(scan) {
+  // Repos' paths and warnings stay out – see "HTML report" in docs/specs/v1.md.
+  const embedded = {
+    ...scan,
+    repos: scan.repos.map(({ name, branch, prs, direct_commits_ignored }) => ({
+      name,
+      branch,
+      prs,
+      direct_commits_ignored,
+    })),
+  };
   // Escaping "<" keeps titles like "</script>" from closing the data block.
-  const data = JSON.stringify(scan).replace(/</g, "\\u003c");
+  const data = JSON.stringify(embedded).replace(/</g, "\\u003c");
   return readFileSync(TEMPLATE, "utf8")
     .replace("/*SCRIPT*/", () => reportScript())
     .replace("/*DATA*/", () => data);

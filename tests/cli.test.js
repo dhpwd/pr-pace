@@ -111,7 +111,8 @@ describe("scan", () => {
         ["scan", "--since", "2026-05-01", "--until", "2026-04-01"],
         /--since is after --until/,
       ],
-      [["scan", "--depth", "-1"], /--depth/],
+      [["scan", "--depth=-1"], /--depth "-1" isn't a whole number/],
+      [["scan", "--depth", "two"], /--depth "two" isn't a whole number/],
       [["scan", join(root, "nowhere")], /is not a folder/],
       [["frobnicate"], /unknown command "frobnicate"/],
       [[], /Usage/],
@@ -144,7 +145,7 @@ describe("report", () => {
     const out = join(root, "report.html");
     const result = run("report", repo.dir, "--out", out);
     assert.equal(result.code, 0, result.stderr);
-    assert.match(result.stderr, /wrote .*report\.html – 2 PRs from 1 repos/);
+    assert.match(result.stderr, /wrote .*report\.html – 2 PRs from 1 repo\n/);
     const html = readFileSync(out, "utf8");
     assert.match(html, /^<!doctype html>/);
     assert.match(html, /Add the second thing/);

@@ -4,10 +4,15 @@ import { renderReport } from "../src/report.js";
 import {
   assignSeries,
   chartModel,
+  formatMetric,
   loadView,
+  metaLine,
+  niceTicks,
   presetRange,
   previousRange,
+  saveView,
   totalsOf,
+  viewKey,
 } from "../src/report/client.js";
 
 let shaCounter = 0;
@@ -133,7 +138,7 @@ describe("report figures", () => {
         localStorage: { getItem: () => JSON.stringify(saved) },
       });
       try {
-        return loadView(defaults, false, bounds);
+        return loadView("key", defaults, false, bounds);
       } finally {
         Reflect.deleteProperty(globalThis, "localStorage");
       }
@@ -149,6 +154,59 @@ describe("report figures", () => {
       "12m",
     );
     assert.equal(load({ split: "author" }).split, "none");
+  });
+
+  test("controls are remembered per set of scanned repos", () => {
+    /** @type {Map<string, string>} */
+    const stored = new Map();
+    Object.assign(globalThis, {
+      localStorage: {
+        getItem: (/** @type {string} */ key) => stored.get(key) ?? null,
+        setItem: (/** @type {string} */ key, /** @type {string} */ value) =>
+          stored.set(key, value),
+      },
+    });
+    /** @param {string[]} names */
+    const keyFor = (names) =>
+      viewKey(
+        /** @type {import('../src/scan.js').ScanResult} */ ({
+          repos: names.map((name) => ({ name })),
+        }),
+      );
+    /** @type {import('../src/report/client.js').View} */
+    const defaults = {
+      preset: "12m",
+      from: "2025-10-18",
+      to: "2026-10-17",
+      period: "week",
+      metric: "prs",
+      split: "none",
+      hiddenRepos: [],
+    };
+    const bounds = { firstDay: "2026-01-01", endDay: "2026-10-17" };
+    try {
+      saveView(keyFor(["app", "api"]), { ...defaults, hiddenRepos: ["app"] });
+      const load = (/** @type {string[]} */ names) =>
+        loadView(keyFor(names), defaults, false, bounds).hiddenRepos;
+      assert.deepEqual(load(["api", "app"]), ["app"]);
+      assert.deepEqual(load(["app", "web"]), []);
+    } finally {
+      Reflect.deleteProperty(globalThis, "localStorage");
+    }
+  });
+
+  test("axis ticks never repeat a label", () => {
+    for (const metric of /** @type {const} */ (["prs", "reverts"])) {
+      for (const max of [0.004, 0.012, 0.02, 0.03, 0.07, 0.3, 1, 3, 7]) {
+        if (metric === "reverts" && max > 1) continue;
+        const { step, max: top } = niceTicks(max, metric);
+        const labels = [];
+        for (let value = 0; value <= top + 1e-9; value += step) {
+          labels.push(formatMetric(value, metric, true));
+        }
+        assert.equal(new Set(labels).size, labels.length, `${metric} ${max}`);
+      }
+    }
   });
 
   test("presets count back from the scan's run time, and the previous range has equal length", () => {
@@ -202,11 +260,21 @@ describe("HTML report", () => {
       authors: ["dev@example.com"],
       all_authors: false,
       include_docs: false,
+      exclude: [],
       since: null,
       until: null,
       timezone: "Europe/London",
     },
-    repos: [],
+    repos: [
+      {
+        name: "app",
+        path: "/home/someone/code/app",
+        branch: "origin/main",
+        prs: 1,
+        direct_commits_ignored: 0,
+        warnings: ["git fetch failed (/home/someone/code/app) – scanned"],
+      },
+    ],
     prs: [
       {
         ...row({
@@ -223,8 +291,44 @@ describe("HTML report", () => {
         html,
       );
     assert.ok(match);
-    assert.deepEqual(JSON.parse(match[1]), JSON.parse(JSON.stringify(scan)));
+    const { path, warnings, ...repo } = scan.repos[0];
+    assert.deepEqual(
+      JSON.parse(match[1]),
+      JSON.parse(JSON.stringify({ ...scan, repos: [repo] })),
+    );
     assert.equal(html.match(/<\/script>/g)?.length, 2);
+  });
+
+  test("leaves repos' paths and warnings out of the embedded scan", () => {
+    assert.doesNotMatch(html, /someone/);
+  });
+
+  test("the header names the authors and every exclusion", () => {
+    const line = (/** @type {Partial<typeof scan.options>} */ options) =>
+      metaLine(
+        { ...scan, options: { ...scan.options, ...options } },
+        "2026-10-17",
+      );
+    assert.match(
+      line({}),
+      /dev@example\.com · .* lines leave out docs, lockfiles and generated files$/,
+    );
+    assert.match(
+      line({ include_docs: true, exclude: ["*.snap", "src/gen"] }),
+      /lines leave out lockfiles, generated files, "\*\.snap" and "src\/gen"$/,
+    );
+    assert.match(
+      line({ authors: [] }),
+      /no PRs counted, as no repo that could be scanned has git user\.email set/,
+    );
+    const skipped = scan.repos.map((repo) => ({ ...repo, branch: null }));
+    assert.match(
+      metaLine(
+        { ...scan, repos: skipped, options: { ...scan.options, authors: [] } },
+        "2026-10-17",
+      ),
+      /no PRs counted, as no repo could be scanned – the scan's warnings say why/,
+    );
   });
 
   test("makes no external requests and carries a script that parses", () => {

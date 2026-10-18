@@ -192,7 +192,9 @@ export function niceTicks(max, metric) {
   const power = 10 ** Math.floor(Math.log10(rough));
   const scaled = rough / power;
   let step = (scaled <= 1 ? 1 : scaled <= 2 ? 2 : scaled <= 5 ? 5 : 10) * power;
+  // Axis labels are whole numbers for PRs and whole percent for revert rate.
   if (metric === "prs" && step < 1) step = 1;
+  if (metric === "reverts" && step < 0.01) step = 0.01;
   return { step, max: Math.ceil(max / step - 1e-9) * step };
 }
 
@@ -311,20 +313,31 @@ export function byId(id) {
 }
 
 /**
+ * The storage key for remembered controls, one per set of scanned repo names
+ * – see "HTML report" in docs/specs/v1.md.
+ * @param {ScanResult} scan
+ */
+export function viewKey(scan) {
+  const names = scan.repos.map((repo) => repo.name).sort();
+  return `pr-velocity:view:${JSON.stringify(names)}`;
+}
+
+/**
  * Remembered controls. Storage can be missing or throw (private windows,
  * file:// in some browsers), so every access is guarded.
- * A saved custom range that misses this report's data (one saved from
- * another report, say) falls back to the default.
+ * A saved custom range that misses this report's data (one saved from an
+ * earlier scan of the same repos, say) falls back to the default.
+ * @param {string} key
  * @param {View} defaults
  * @param {boolean} allowAuthorSplit
  * @param {{ firstDay: string, endDay: string }} bounds
  * @returns {View}
  */
-export function loadView(defaults, allowAuthorSplit, bounds) {
+export function loadView(key, defaults, allowAuthorSplit, bounds) {
   /** @type {Partial<View>} */
   let saved = {};
   try {
-    saved = JSON.parse(localStorage.getItem("pr-velocity:view") ?? "{}") ?? {};
+    saved = JSON.parse(localStorage.getItem(key) ?? "{}") ?? {};
   } catch {
     return defaults;
   }
@@ -367,10 +380,13 @@ export function loadView(defaults, allowAuthorSplit, bounds) {
   return view;
 }
 
-/** @param {View} view */
-export function saveView(view) {
+/**
+ * @param {string} key
+ * @param {View} view
+ */
+export function saveView(key, view) {
   try {
-    localStorage.setItem("pr-velocity:view", JSON.stringify(view));
+    localStorage.setItem(key, JSON.stringify(view));
   } catch {
     // Storage unavailable: the report works, it just won't remember.
   }
@@ -786,6 +802,36 @@ export function drawTiles(current, previous, previousLabel) {
 }
 
 /**
+ * The report's header line: when and what was scanned, and what lines leave
+ * out.
+ * @param {ScanResult} scan
+ * @param {string} generatedDay
+ */
+export function metaLine(scan, generatedDay) {
+  const { options } = scan;
+  const authors = options.all_authors
+    ? "all authors"
+    : options.authors.length > 0
+      ? options.authors.join(", ")
+      : scan.repos.every((repo) => repo.branch === null)
+        ? "no PRs counted, as no repo could be scanned – the scan's warnings say why"
+        : "no PRs counted, as no repo that could be scanned has git user.email set";
+  const left = [
+    ...(options.include_docs ? [] : ["docs"]),
+    "lockfiles",
+    "generated files",
+    // Scans saved before `exclude` was recorded have none.
+    ...(options.exclude ?? []).map((glob) => `"${glob}"`),
+  ];
+  const leftOut = `${left.slice(0, -1).join(", ")} and ${left[left.length - 1]}`;
+  const repos = scan.repos.length;
+  return (
+    `Generated ${dayLabel(generatedDay, true)} · ${repos} repo${repos === 1 ? "" : "s"} scanned · ${authors} · dates in ${options.timezone}` +
+    ` · lines leave out ${leftOut}`
+  );
+}
+
+/**
  * @param {ScanResult} scan
  */
 export function main(scan) {
@@ -833,8 +879,10 @@ export function main(scan) {
   };
 
   const initialRange = presetRange("12m", bounds);
+  const storageKey = viewKey(scan);
   /** @type {View} */
   let view = loadView(
+    storageKey,
     {
       preset: "12m",
       from: initialRange.from,
@@ -852,14 +900,7 @@ export function main(scan) {
   /** @type {{ columns: Column[], series: Series[] }} */
   let model = { columns: [], series: [] };
 
-  const authors = scan.options.all_authors
-    ? "all authors"
-    : scan.options.authors.length > 0
-      ? scan.options.authors.join(", ")
-      : "no git user.email configured, so no PRs counted";
-  byId("meta").textContent =
-    `Generated ${dayLabel(generatedDay, true)} · ${scan.repos.length} repo${scan.repos.length === 1 ? "" : "s"} scanned · ${authors} · dates in ${scan.options.timezone}` +
-    ` · lines leave out ${scan.options.include_docs ? "" : "docs, "}lockfiles and generated files`;
+  byId("meta").textContent = metaLine(scan, generatedDay);
 
   /**
    * @param {string} id
@@ -1116,7 +1157,7 @@ export function main(scan) {
     }
 
     drawChartAndDetails();
-    saveView(view);
+    saveView(storageKey, view);
   };
 
   let pending = false;
