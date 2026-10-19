@@ -24,7 +24,7 @@ const COMMITTER = { name: "Fixture Committer", email: "committer@example.com" };
 export const NOW = Date.UTC(2026, 9, 17, 20);
 
 /** @param {string} prefix */
-export function tempDir(prefix = "pr-velocity-") {
+export function tempDir(prefix = "pr-pace-") {
   return mkdtempSync(join(tmpdir(), prefix));
 }
 

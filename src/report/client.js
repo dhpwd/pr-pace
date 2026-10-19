@@ -39,7 +39,7 @@ export function weightOf(lines) {
 
 /**
  * The median of the counted PRs' lines, or null when there are none.
- * @param {Row[]} rows
+ * @param {{ is_revert: boolean, lines: number }[]} rows
  * @returns {number | null}
  */
 export function medianLines(rows) {
@@ -358,7 +358,7 @@ export function byId(id) {
  */
 export function viewKey(scan) {
   const names = scan.repos.map((repo) => repo.name).sort();
-  return `pr-velocity:view:${JSON.stringify(names)}`;
+  return `pr-pace:view:${JSON.stringify(names)}`;
 }
 
 /**

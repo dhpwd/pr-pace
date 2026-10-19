@@ -1,6 +1,6 @@
-# pr-velocity
+# pr-pace
 
-A Node CLI that measures PR velocity from local git history – PR count, size-weighted PRs, median PR size, lines changed and revert rate per person over time. It scans one repo or a folder of repos and writes JSON (`scan`) or a self-contained HTML report (`report`).
+A Node CLI that measures PR pace from local git history – a one-line PR pace to post, and PR count, size-weighted PRs, median PR size, lines changed and revert rate per person over time. It scans one repo or a folder of repos and prints the PR pace line (`pace`) or writes JSON (`scan`) or a self-contained HTML report (`report`).
 
 @~/Workspace/cli-agents/shared/coding.md
 
@@ -13,13 +13,14 @@ A Node CLI that measures PR velocity from local git history – PR count, size-w
 - Git process budget per repo: the per-commit work is one `git log --first-parent --diff-merges=first-parent --numstat -M` call, one batched call for second-parent authors and one `git check-attr --stdin`. A fixed number of setup calls sits outside it – `git config user.email`, default-branch resolution, `git check-mailmap` and `git fetch` under `--fetch`. Never spawn a process per commit
 - Read-only against scanned repos – `--fetch` is the only option that writes to them
 - The HTML report is one file: embedded scan JSON, inline SVG charts, vanilla JS, no external requests. It must work offline and as a message attachment
-- The spec's design decisions define what the numbers mean (unit of work, first-parent walk, line exclusions, size-weighted PRs, median PR size, revert handling). Raise a change to any of them as a design decision before implementing it
+- The spec's design decisions define what the numbers mean (unit of work, first-parent walk, line exclusions, size-weighted PRs, median PR size, revert handling, the PR pace figure and its 30-day window). Raise a change to any of them as a design decision before implementing it
+- The PR pace line carries the package's major version. A change to the figure's definition – weighting, window, which PRs count, line exclusions – needs a major version bump
 
 ## Commands
 
 - `npm test` – run the unit tests
 - `npm run typecheck` – `tsc --noEmit` over the source and tests
-- `npx . scan <path>` / `npx . report <path>` – run the CLI from the checkout. Bare `npx pr-velocity` falls through to the npm registry, and `npm link` leaves a global symlink behind
+- `npx . pace <path>` / `npx . scan <path>` / `npx . report <path>` – run the CLI from the checkout. Bare `npx pr-pace` falls through to the npm registry, and `npm link` leaves a global symlink behind
 
 ## Verification
 
@@ -38,8 +39,8 @@ A Node CLI that measures PR velocity from local git history – PR count, size-w
 - `docs/patterns/report-inlining.md` – read before changing the report's browser code: how it's inlined from modules and the rules those modules follow
 - `docs/patterns/git.md` – read before adding a git call or spawning git: the wrapper that never throws, per-repo warnings, the environment git runs in, batching and `-z` parsing
 - `docs/patterns/dates.md` – read before touching dates or periods: day strings in the scan's timezone and the helpers that keep results independent of `TZ`
-- `docs/patterns/testing.md` – read before writing tests: fixture repos isolated from the machine's git config, and the test file layout
+- `docs/patterns/testing.md` – read before writing tests: fixture repos isolated from the machine's git config, testing commands that count back from today, and the test file layout
 
 ## Key references
 
-- `docs/specs/v1.md` – v1 build spec: commands, PR detection, metrics, JSON schema and report behaviour
+- `docs/specs/v1.md` – v1 build spec: commands, PR detection, metrics, the PR pace figure, JSON schema and report behaviour

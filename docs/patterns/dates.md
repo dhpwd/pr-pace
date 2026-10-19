@@ -13,4 +13,4 @@
 
 **Anti-pattern.** Local-time getters (`getDate`, `getDay`, `getHours`) or `Date.parse` on a datetime without an offset. Both read the process's zone, so results change with `TZ`.
 
-**When to use.** Any new date logic in the CLI or the report. `tests/time.test.js` runs the bucketing in child processes under several `TZ` values – extend it alongside new bucketing logic.
+**When to use.** Any new date logic in the CLI or the report. Tests run it in child processes under several `TZ` values – the bucketing in `tests/time.test.js`, the PR pace window in `tests/pace.test.js` – so add the same check alongside new date logic.

@@ -15,6 +15,14 @@ const result = scan(scanOptions([repo.dir]));
 
 **When to use.** Any test that needs git history. The report check in `.claude/CLAUDE.md` builds its fixture repos with the same `Repo` class.
 
+## Commands that count back from today
+
+**Problem.** The live `pace` command takes its window from the real clock, but the `Repo` clock starts in January 2026 and `scanOptions` fixes `NOW`, so default fixture commits fall outside any window counted back from today.
+
+**Solution.** Pass each commit a `date` relative to `Date.now()`, at least a day inside the window's edges, and set `TZ` on the spawned CLI. Read today with `dayOf` in the same zone just before and just after the spawn, and accept the line's date matching either, so a run across midnight still passes. Window edges and arithmetic belong in unit tests against a scan with a fixed `generated_at` (`tests/pace.test.js`), leaving the live CLI test only the end-to-end line.
+
+**Anti-pattern.** Asserting today's date computed once before the spawn, which fails for a run that crosses midnight.
+
 ## Test file layout
 
 Test files are `tests/*.test.js`, with helpers beside them. `node --test` treats every file under a folder named `test/` as a test file, so the folder is `tests/` to keep helpers such as `fixtures.js` from running as tests.

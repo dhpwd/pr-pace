@@ -1,10 +1,10 @@
 {
-  "name": "pr-velocity",
+  "name": "pr-pace",
   "version": "0.1.0",
-  "description": "Measure PR velocity from local git history: PR count, size-weighted PRs, median PR size, lines changed and revert rate per person over time",
+  "description": "Measure PR pace from local git history: a one-line PR pace to post, and PR count, size-weighted PRs, median PR size, lines changed and revert rate per person over time",
   "type": "module",
   "bin": {
-    "pr-velocity": "bin/pr-velocity.js"
+    "pr-pace": "bin/pr-pace.js"
   },
   "files": [
     "bin",
@@ -21,6 +21,7 @@
     "git",
     "pull-requests",
     "velocity",
+    "pace",
     "metrics",
     "cli"
   ],
