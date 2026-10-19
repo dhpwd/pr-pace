@@ -81,6 +81,16 @@ pr-pace report --from scan.json --out report.html
 
 `pr-pace report --help` lists the options.
 
+## PRs opened by coding agents
+
+A PR that a coding agent such as Copilot's coding agent, Devin or Cursor's cloud agents opened under its own identity counts for the person the agent names in a `Co-authored-by:` trailer, not for the agent. Copilot and Cursor name you by your GitHub no-reply address (`<id>+<login>@users.noreply.github.com`), which may not be your git email, so by default those PRs don't count as yours, and the repo's warning lists that address among the PR authors it found. Pass it as another `--author`, or map it to your usual identity in the repo's `.mailmap`:
+
+```
+Your Name <you@example.com> <12345678+your-login@users.noreply.github.com>
+```
+
+An agent PR that names no one stays with the agent, and the warning says how to claim it.
+
 ## How the numbers are defined
 
 [`docs/specs/v1.md`](docs/specs/v1.md) sets out what PR pace counts and its limits, what counts as a PR, which lines count, how reverts are detected and linked, the JSON schema and the report's behaviour.

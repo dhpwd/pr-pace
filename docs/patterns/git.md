@@ -20,7 +20,7 @@
 
 ## Batching inside the process budget
 
-**Problem.** The per-repo git budget in `.claude/CLAUDE.md` allows no process per commit, but merge PRs need their branch tips' authors and every changed path needs its linguist attributes.
+**Problem.** The per-repo git budget in `.claude/CLAUDE.md` allows no process per commit, but merge PRs need their branch tips' authors and messages, and every changed path needs its linguist attributes.
 
 **Solution.** Collect the inputs from the one `git log` pass, then make a single call that takes them all: `git log --no-walk=unsorted --stdin` for second parents, `git check-attr -z --stdin` for paths and `git check-mailmap` with every email as an argument. Read machine output in NUL-separated form. The main log uses `-z` with `%x1e` before each record and `%x1f` between fields (`LOG_FORMAT` in `src/scan.js`), so messages and paths containing spaces or newlines can't break parsing. Under `-z --numstat` a rename shows an empty path, followed by the old and new paths as their own tokens.
 

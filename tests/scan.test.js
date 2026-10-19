@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, describe, test } from "node:test";
+import { paceOf } from "../src/pace.js";
 import { repoNames } from "../src/repos.js";
 import { scan } from "../src/scan.js";
 import {
@@ -662,6 +663,270 @@ describe("authors", () => {
   });
 });
 
+describe("agent PRs", () => {
+  // Public vendor identities: coding agents and a dependency bot.
+  const DEVIN = {
+    name: "devin-ai-integration[bot]",
+    email: "158243242+devin-ai-integration[bot]@users.noreply.github.com",
+  };
+  const COPILOT = {
+    name: "Copilot",
+    email: "198982749+Copilot@users.noreply.github.com",
+  };
+  const COPILOT_COMMITS = {
+    name: "copilot-swe-agent[bot]",
+    email: "198982749+Copilot@users.noreply.github.com",
+  };
+  const CURSOR = { name: "Cursor Agent", email: "cursoragent@cursor.com" };
+  const CURSOR_ALT = { name: "Cursor Agent", email: "cursor-agent@cursor.com" };
+  const DEPENDABOT = {
+    name: "dependabot[bot]",
+    email: "49699333+dependabot[bot]@users.noreply.github.com",
+  };
+  const files = () => ({ [`f${++counter}.js`]: "x\n" });
+
+  /** @param {...import('./fixtures.js').Identity} people */
+  function trailers(...people) {
+    return people
+      .map(({ name, email }) => `Co-authored-by: ${name} <${email}>`)
+      .join("\n");
+  }
+
+  /** @param {import('../src/scan.js').PrResult} row */
+  function credit(row) {
+    return {
+      name: row.author_name,
+      email: row.author_email,
+      agent: row.agent_email,
+    };
+  }
+
+  /** @param {import('./fixtures.js').Identity} identity */
+  function label({ name, email }) {
+    return `${name} <${email}>`;
+  }
+
+  test("a squash PR a GitHub App bot opened counts for the person its Co-authored-by: names", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    repo.squash(1, "Add export", {
+      author: DEVIN,
+      files: files(),
+      body: trailers(DEV),
+    });
+    assert.deepEqual(credit(pr(scanRepo(repo), 1)), {
+      name: DEV.name,
+      email: DEV.email,
+      agent: DEVIN.email,
+    });
+  });
+
+  test("Copilot's squash address and Cursor's agent addresses are agents too", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    const agents = [COPILOT, CURSOR, CURSOR_ALT];
+    agents.forEach((agent, i) =>
+      repo.squash(i + 1, `Work ${i + 1}`, {
+        author: agent,
+        files: files(),
+        body: trailers(OTHER),
+      }),
+    );
+    assert.deepEqual(
+      scanRepo(repo, { allAuthors: true }).prs.map(credit),
+      agents.map((agent) => ({
+        name: OTHER.name,
+        email: OTHER.email,
+        agent: agent.email,
+      })),
+    );
+  });
+
+  test("a merge-commit PR whose branch tip an agent wrote counts for the person the tip names", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    repo.mergePR(4, "Add the widget", {
+      author: COPILOT_COMMITS,
+      commits: [
+        { message: "Initial plan" },
+        {
+          message: `Add the widget\n\n${trailers(COPILOT_COMMITS, DEV)}`,
+          files: files(),
+        },
+      ],
+    });
+    assert.deepEqual(credit(pr(scanRepo(repo), 4)), {
+      name: DEV.name,
+      email: DEV.email,
+      agent: COPILOT_COMMITS.email,
+    });
+  });
+
+  test("the first person named wins, after any agent trailers, and the PR counts once", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    repo.squash(1, "Add search", {
+      author: COPILOT,
+      files: files(),
+      body: `* Initial plan\n\n* Add search\n\n${trailers(COPILOT, DEV, OTHER)}`,
+    });
+    const result = scanRepo(repo, { allAuthors: true });
+    assert.equal(result.prs.length, 1);
+    assert.deepEqual(credit(pr(result, 1)), {
+      name: DEV.name,
+      email: DEV.email,
+      agent: COPILOT.email,
+    });
+  });
+
+  test("a mixed-case Co-Authored-By: with extra spacing is read", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    repo.squash(1, "Fix the parser", {
+      author: CURSOR,
+      files: files(),
+      body: `Details.\n\n   Co-Authored-By:   ${OTHER.name}   <${OTHER.email}>`,
+    });
+    assert.equal(
+      pr(scanRepo(repo, { allAuthors: true }), 1).author_email,
+      OTHER.email,
+    );
+  });
+
+  test("an agent PR naming no person keeps the agent, with agent_email set", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    repo.squash(1, "Tidy", { author: DEVIN, files: files() });
+    repo.squash(2, "Only agents named", {
+      author: COPILOT,
+      files: files(),
+      body: trailers(COPILOT_COMMITS),
+    });
+    repo.squash(3, "No email given", {
+      author: CURSOR,
+      files: files(),
+      body: "Co-authored-by: Other Person <>",
+    });
+    assert.deepEqual(scanRepo(repo, { allAuthors: true }).prs.map(credit), [
+      { name: DEVIN.name, email: DEVIN.email, agent: DEVIN.email },
+      { name: COPILOT.name, email: COPILOT.email, agent: COPILOT.email },
+      { name: CURSOR.name, email: CURSOR.email, agent: CURSOR.email },
+    ]);
+  });
+
+  test("a person's PR keeps its author whoever it names as co-author", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    repo.squash(1, "Pair on it", { files: files(), body: trailers(OTHER) });
+    assert.deepEqual(credit(pr(scanRepo(repo, { allAuthors: true }), 1)), {
+      name: DEV.name,
+      email: DEV.email,
+      agent: null,
+    });
+  });
+
+  test("a co-author goes through .mailmap, name and email", () => {
+    const noreply = {
+      name: "dev-one",
+      email: "12345678+dev-one@users.noreply.github.com",
+    };
+    const repo = newRepo();
+    repo.commit("Initial commit", {
+      files: { ".mailmap": `${DEV.name} <${DEV.email}> <${noreply.email}>\n` },
+    });
+    repo.squash(1, "Agent work", {
+      author: CURSOR,
+      files: files(),
+      body: trailers(noreply),
+    });
+    assert.deepEqual(credit(pr(scanRepo(repo), 1)), {
+      name: DEV.name,
+      email: DEV.email,
+      agent: CURSOR.email,
+    });
+  });
+
+  test("the default author filter and PR pace count an agent PR naming the repo's user.email", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit", { date: "2026-10-01T10:00:00Z" });
+    repo.squash(1, "Agent work", {
+      author: DEVIN,
+      files: { "a.js": "x\n".repeat(100) },
+      body: trailers(DEV),
+      date: "2026-10-10T10:00:00Z",
+    });
+    repo.squash(2, "Someone else's agent work", {
+      author: DEVIN,
+      files: { "b.js": "y\n".repeat(100) },
+      body: trailers(OTHER),
+      date: "2026-10-11T10:00:00Z",
+    });
+    const result = scanRepo(repo);
+    assert.deepEqual(
+      result.prs.map((row) => row.number),
+      [1],
+    );
+    const pace = paceOf(result);
+    assert.equal(pace.count, 1);
+    assert.equal(pace.pace, 7 / 30);
+  });
+
+  test("a dependency bot's squash PR that names a person counts for them", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    repo.squash(1, "Bump the parser", {
+      author: DEPENDABOT,
+      files: files(),
+      body: `Bumps the parser.\n\n${trailers(OTHER)}`,
+    });
+    assert.deepEqual(credit(pr(scanRepo(repo, { allAuthors: true }), 1)), {
+      name: OTHER.name,
+      email: OTHER.email,
+      agent: DEPENDABOT.email,
+    });
+  });
+
+  test("the no-match warning adds a hint for a coding agent it lists, and none for a dependency bot", () => {
+    const repo = newRepo({ email: "nobody@example.com" });
+    repo.commit("Initial commit");
+    repo.squash(1, "One", { author: COPILOT, files: files() });
+    repo.squash(2, "Two", { author: COPILOT, files: files() });
+    repo.squash(3, "Bump", { author: DEPENDABOT, files: files() });
+    assert.deepEqual(scanRepo(repo).repos[0].warnings, [
+      `no PRs match the author filter. Most frequent PR authors: ${label(COPILOT)} (2), ${label(DEPENDABOT)} (1) – pass --author to choose. ${label(COPILOT)} is a coding agent with no co-author naming a person on these PRs – if only you use it, pass --author with its email or map it to yourself in .mailmap, otherwise turn on the agent's setting that adds you as co-author`,
+    ]);
+
+    const bots = newRepo({ email: "nobody@example.com" });
+    bots.commit("Initial commit");
+    bots.squash(1, "Bump", { author: DEPENDABOT, files: files() });
+    assert.deepEqual(scanRepo(bots).repos[0].warnings, [
+      `no PRs match the author filter. Most frequent PR authors: ${label(DEPENDABOT)} (1) – pass --author to choose`,
+    ]);
+  });
+
+  test("the hint names two or more coding agents in one sentence", () => {
+    const plural =
+      " are coding agents with no co-author naming a person on these PRs – if only you use them, pass --author with their emails or map them to yourself in .mailmap, otherwise turn on each agent's setting that adds you as co-author";
+    const repo = newRepo({ email: "nobody@example.com" });
+    repo.commit("Initial commit");
+    repo.squash(1, "One", { author: COPILOT, files: files() });
+    repo.squash(2, "Two", { author: DEVIN, files: files() });
+    const [two] = scanRepo(repo).repos[0].warnings;
+    assert.ok(
+      two.endsWith(`choose. ${label(COPILOT)} and ${label(DEVIN)}${plural}`),
+      two,
+    );
+    repo.squash(3, "Three", { author: CURSOR, files: files() });
+    const [three] = scanRepo(repo).repos[0].warnings;
+    assert.ok(
+      three.endsWith(
+        `choose. ${label(COPILOT)}, ${label(CURSOR)} and ${label(DEVIN)}${plural}`,
+      ),
+      three,
+    );
+  });
+});
+
 describe("JSON output", () => {
   test("matches the schema, with rows sorted by merged_at and repos[].prs counting the filtered set", () => {
     const repo = newRepo();
@@ -727,6 +992,7 @@ describe("JSON output", () => {
       "method",
       "author_name",
       "author_email",
+      "agent_email",
       "merged_at",
       "added",
       "removed",
