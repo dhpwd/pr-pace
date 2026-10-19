@@ -1,6 +1,29 @@
-# pr-velocity
+# pr-pace
 
-Measure PR velocity from local git history: how many pull requests a person lands, how big they are and how often they get reverted, over time. Point it at one repo or a folder of repos and it writes JSON or a self-contained HTML report.
+PR pace is the size-weighted PRs you merged per week over the last 30 days, where each PR counts √(lines ÷ 100): a 100-line PR counts 1 and a 400-line PR 2. One command prints it as a line to post:
+
+```sh
+npx pr-pace pace <path>
+```
+
+```
+PR pace 69.1/wk · 30 days to 2026-10-19 · 100 PRs · median 500 lines · pr-pace v1
+```
+
+Post the whole line, so the window, PR count, median PR size and version go with the figure. Read it with its limits in mind:
+
+- It measures delivered change – code that landed and stayed – not effort. Revert PRs and PRs since reverted count zero, so a later run can lower a figure as reverts land
+- A few large PRs carry much of it, and below about five PRs a week it's noisy
+- A stack that needs more lines for the same change scores higher, so comparing people across stacks is weak. It's strongest as you against your own history
+- Only merged PRs on the default branch of the repos you scan count. Commits pushed straight to the branch and repos left out of the scan don't show
+
+For the history behind it, write the report and open it:
+
+```sh
+npx pr-pace report <path> --open
+```
+
+pr-pace reads local git history: how many pull requests a person lands, how big they are and how often they get reverted, over time. Point it at one repo or a folder of repos and it prints a one-line PR pace or writes JSON or a self-contained HTML report.
 
 It counts merged PRs on each repo's default branch – squash merges and merge commits, using GitHub and GitLab conventions – and reports five figures per day, week or month:
 
@@ -22,31 +45,42 @@ Needs Node 20 or later and git. With git older than 2.40 the `.gitattributes` ex
 npm install --global .
 ```
 
-That puts `pr-velocity` on your PATH. To run it without installing, use `npx .` from the checkout in place of `pr-velocity` below.
+That puts `pr-pace` on your PATH. To run it without installing, use `npx .` from the checkout in place of `pr-pace` below.
 
 ## Commands
 
-### `pr-velocity scan [path...]`
+### `pr-pace pace [path...]`
 
-Scans each path – a repo, or a folder whose subfolders are repos – and writes the result as JSON to stdout.
-
-```sh
-pr-velocity scan ~/code --since 2026-01-01 --out scan.json
-```
-
-By default it counts the PRs authored by each repo's `git config user.email`. Pass `--author <email|name>` (repeatable) for someone else, or `--all-authors` for a team view. Other options limit the date range, set the folder search depth, override the default branch, fetch first and adjust which files count towards lines changed – `pr-velocity scan --help` lists them all.
-
-### `pr-velocity report [path...]`
-
-Scans with the same options and writes `pr-velocity.html`: a single file with charts by day, week or month, splits by repo or author, and the list of PRs behind each bar. It makes no network requests, so it works offline and as an attachment.
+Scans each path – a repo, or a folder whose subfolders are repos – and prints your PR pace line to stdout. The line covers the 30 days to today, today included, in this machine's timezone, and sums across every repo scanned.
 
 ```sh
-pr-velocity report ~/code --open
-pr-velocity report --from scan.json --out velocity.html
+pr-pace pace ~/code
+pr-pace pace --from scan.json
 ```
 
-`pr-velocity report --help` lists the options.
+It takes `--author` (repeatable, for one person's several identities), `--exclude`, `--depth`, `--branch` and `--fetch` as `scan` does. It refuses `--since`, `--until`, `--all-authors` and `--include-docs`, so every line covers one person's last 30 days and counts lines the same way. `--exclude` stays for generated code the default rules miss, and can only lower the figure. `--from <scan.json>` prints the line from a saved scan, counting back from the day the scan ran. `pr-pace pace --help` lists the options.
+
+### `pr-pace scan [path...]`
+
+Scans each path and writes the result as JSON to stdout.
+
+```sh
+pr-pace scan ~/code --since 2026-01-01 --out scan.json
+```
+
+By default it counts the PRs authored by each repo's `git config user.email`. Pass `--author <email|name>` (repeatable) for someone else, or `--all-authors` for a team view. Other options limit the date range, set the folder search depth, override the default branch, fetch first and adjust which files count towards lines changed – `pr-pace scan --help` lists them all.
+
+### `pr-pace report [path...]`
+
+Scans with the same options and writes `pr-pace.html`: a single file with charts by day, week or month, splits by repo or author, and the list of PRs behind each bar. It makes no network requests, so it works offline and as an attachment.
+
+```sh
+pr-pace report ~/code --open
+pr-pace report --from scan.json --out report.html
+```
+
+`pr-pace report --help` lists the options.
 
 ## How the numbers are defined
 
-[`docs/specs/v1.md`](docs/specs/v1.md) sets out what counts as a PR, which lines count, how reverts are detected and linked, the JSON schema and the report's behaviour.
+[`docs/specs/v1.md`](docs/specs/v1.md) sets out what PR pace counts and its limits, what counts as a PR, which lines count, how reverts are detected and linked, the JSON schema and the report's behaviour.
