@@ -1,19 +1,17 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { dirname, relative, resolve } from "node:path";
+import { dirname, relative, resolve, sep } from "node:path";
 import { describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
-const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
-
-/** A line comment, or a block comment that opens and closes on the line. */
-const COMMENT_LINE = /^\/\/|^\/\*(?:(?!\*\/).)*\*\/$/;
+/** An imported name without `as`. */
+const PLAIN_NAME = /^[\w$]+$/;
 
 /** Column-0 lines a module of exported function declarations may hold. */
 const ALLOWED_LINES = [
-  /^export (async )?function [A-Za-z_$][\w$]*\(/,
+  /^export (async )?function [\w$]+\(/,
   /^\}$/,
   /^\) \{$/,
   /^\}\) \{$/,
@@ -36,29 +34,28 @@ function topLevelFindings(source, allowedSources) {
   const findings = [];
   let inComment = false;
   let inImport = false;
-  for (const [i, text] of source.split("\n").entries()) {
+  for (const [i, text] of source.split(/\r?\n/).entries()) {
     const flag = () => findings.push({ line: i + 1, text });
-    if (inComment) {
-      inComment = !text.includes("*/");
-    } else if (inImport) {
+    if (inImport) {
       const end = text.match(/^\} from "(.+)";$/);
       if (end) {
         inImport = false;
         if (!allowedSources.includes(end[1])) flag();
-      } else if (!/^\s+[A-Za-z_$][\w$]*,?$/.test(text)) {
+      } else if (!/^\s+[\w$]+,?$/.test(text)) {
         flag();
       }
-    } else if (text === "" || /^\s/.test(text) || COMMENT_LINE.test(text)) {
+    } else if (inComment || text.startsWith("/*")) {
+      const end = text.indexOf("*/", inComment ? 0 : 2);
+      inComment = end === -1;
+      if (!inComment && text.slice(end + 2).trim() !== "") flag();
+    } else if (text === "" || /^\s/.test(text) || text.startsWith("//")) {
       continue;
-    } else if (text.startsWith("/*")) {
-      inComment = !text.includes("*/");
-      if (!inComment) flag();
     } else if (text === "import {") {
       inImport = true;
     } else {
       const named = text.match(/^import \{ (.+) \} from "(.+)";$/);
       const allowed = named
-        ? named[1].split(", ").every((name) => IDENTIFIER.test(name)) &&
+        ? named[1].split(", ").every((name) => PLAIN_NAME.test(name)) &&
           allowedSources.includes(named[2])
         : ALLOWED_LINES.some((line) => line.test(text));
       if (!allowed) flag();
@@ -77,18 +74,28 @@ function inlinedModules() {
 }
 
 /**
+ * `to` relative to the folder `from`, with forward slashes on every platform,
+ * as imports and findings write paths.
+ * @param {string} from
+ * @param {string} to
+ */
+function relativePath(from, to) {
+  return relative(from, to).split(sep).join("/");
+}
+
+/**
  * @param {string} from
  * @param {string} to
  */
 function importPath(from, to) {
-  const path = relative(dirname(from), to);
+  const path = relativePath(dirname(from), to);
   return path.startsWith(".") ? path : `./${path}`;
 }
 
 describe("inlined report modules", () => {
   test("hold only exported function declarations and imports from other inlined modules", () => {
     const modules = inlinedModules();
-    const files = modules.map((file) => relative(ROOT, file));
+    const files = modules.map((file) => relativePath(ROOT, file));
     assert.ok(files.includes("src/time.js"), files.join(", "));
     assert.ok(files.includes("src/report/client.js"), files.join(", "));
     const findings = modules.flatMap((file) => {
@@ -96,7 +103,7 @@ describe("inlined report modules", () => {
         .filter((other) => other !== file)
         .map((other) => importPath(file, other));
       return topLevelFindings(readFileSync(file, "utf8"), allowed).map(
-        ({ line, text }) => `${relative(ROOT, file)}:${line}: ${text}`,
+        ({ line, text }) => `${relativePath(ROOT, file)}:${line}: ${text}`,
       );
     });
     assert.deepEqual(findings, []);
@@ -153,6 +160,8 @@ describe("the top-level check", () => {
       "",
     ].join("\n");
     assert.deepEqual(topLevelFindings(source, ALLOWED_SOURCES), []);
+    const crlf = source.replaceAll("\n", "\r\n");
+    assert.deepEqual(topLevelFindings(crlf, ALLOWED_SOURCES), []);
   });
 
   /** @type {{ mistake: string, source: string[], line: number }[]} */
@@ -166,6 +175,16 @@ describe("the top-level check", () => {
         "}",
       ],
       line: 1,
+    },
+    {
+      mistake: "a constant after a one-line block comment",
+      source: ["/* Day names. */ const DAYS = [];"],
+      line: 1,
+    },
+    {
+      mistake: "a constant after a block comment's closing line",
+      source: ["/**", " * Day names.", " */ const DAYS = [];"],
+      line: 3,
     },
     { mistake: "a module-level let", source: ["let count = 0;"], line: 1 },
     { mistake: "a module-level var", source: ["var count = 0;"], line: 1 },
