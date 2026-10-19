@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { describe, test } from "node:test";
 import { paceLine, paceOf } from "../src/pace.js";
 
@@ -72,6 +73,34 @@ describe("PR pace", () => {
     assert.equal(
       paceLine(scan, "1.0.0"),
       "PR pace 0.7/wk · 30 days to 2026-10-19 · 3 PRs · median 100 lines · pr-pace v1",
+    );
+  });
+
+  test("gives the same line whatever TZ the process runs under", () => {
+    const scan = scanOf([
+      pr({ merged_at: "2026-09-19T23:59:00-04:00" }),
+      pr({ merged_at: "2026-09-20T00:00:00-04:00", lines: 400 }),
+      pr({ merged_at: "2026-10-19T08:00:00-04:00", lines: 0 }),
+    ]);
+    const script = `
+      import { paceLine } from ${JSON.stringify(new URL("../src/pace.js", import.meta.url).href)};
+      console.log(paceLine(${JSON.stringify(scan)}, "1.0.0"));
+    `;
+    const outputs = [
+      "UTC",
+      "America/Los_Angeles",
+      "Asia/Kolkata",
+      "Pacific/Kiritimati",
+    ].map((tz) =>
+      execFileSync(process.execPath, ["--input-type=module", "-e", script], {
+        env: { ...process.env, TZ: tz },
+        encoding: "utf8",
+      }),
+    );
+    for (const output of outputs) assert.equal(output, outputs[0]);
+    assert.equal(
+      outputs[0],
+      "PR pace 0.5/wk · 30 days to 2026-10-19 · 2 PRs · median 200 lines · pr-pace v1\n",
     );
   });
 

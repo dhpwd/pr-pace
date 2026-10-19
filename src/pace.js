@@ -1,4 +1,4 @@
-import { medianLines, weightOf } from "./report/client.js";
+import { medianLines, presetRange, weightOf } from "./report/client.js";
 import { addDays, dayOf, startOfDay, zoneFormatter } from "./time.js";
 
 /**
@@ -15,8 +15,15 @@ import { addDays, dayOf, startOfDay, zoneFormatter } from "./time.js";
 export function paceOf(scan) {
   const formatter = zoneFormatter(scan.options.timezone);
   const today = dayOf(Date.parse(scan.generated_at), formatter);
-  const from = startOfDay(addDays(today, -29), formatter);
-  const to = startOfDay(addDays(today, 1), formatter);
+  // The report's "30 days" preset, so the line and the preset cover the same
+  // days.
+  const days = presetRange("30d", {
+    generatedDay: today,
+    firstDay: today,
+    endDay: today,
+  });
+  const from = startOfDay(days.from, formatter);
+  const to = startOfDay(addDays(days.to, 1), formatter);
   const prs = scan.prs.filter((pr) => {
     const merged = Date.parse(pr.merged_at);
     return (
