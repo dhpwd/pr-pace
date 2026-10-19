@@ -26,6 +26,19 @@ import {
  * @typedef {{ count: number, weighted: number, median: number | null, lines: number, reverted: number }} Totals
  * @typedef {{ series: Series, totals: Totals, value: number | null }} Part
  * @typedef {{ key: string, rows: Row[], totals: Totals, value: number | null, parts: Part[], average: number | null }} Column
+ *
+ * @typedef {object} MetricDef
+ * @property {string} label the control option, chart title, tile label and single-series legend entry, and weighted PRs' PR list column header
+ * @property {string} note the chart note
+ * @property {string | null} tileNote
+ * @property {(totals: Totals) => number | null} value
+ * @property {boolean} stacks false draws a split side by side and pools the moving average's four periods
+ * @property {string} averageLabel
+ * @property {number} minStep the smallest axis tick step, so compact tick labels never repeat
+ * @property {number | null} decimals for display outside axis ticks. null shows whole numbers whole and anything else to one decimal
+ * @property {boolean} rate a share of PRs reverted: shown as a percent, its change in points and its fraction of PRs beside it
+ * @property {'up' | 'down' | 'none'} tone which way is good, or "none" for a figure that's context, not a target
+ * @property {(column: Column) => string} summary the PR list's summary line
  */
 
 /**
@@ -78,16 +91,105 @@ export function totalsOf(rows) {
 }
 
 /**
- * @param {Totals} totals
- * @param {Metric} metric
- * @returns {number | null}
+ * The report's metrics, in display order – see "HTML report" in
+ * docs/specs/v1.md.
+ * @returns {Record<Metric, MetricDef>}
  */
-export function metricOf(totals, metric) {
-  if (metric === "prs") return totals.count;
-  if (metric === "weighted") return totals.weighted;
-  if (metric === "median") return totals.median;
-  if (metric === "lines") return totals.lines;
-  return totals.count === 0 ? null : totals.reverted / totals.count;
+export function metrics() {
+  const prCount = (/** @type {Totals} */ t) =>
+    `${t.count} PR${t.count === 1 ? "" : "s"}`;
+  const revertRate = (/** @type {Totals} */ t) =>
+    t.count === 0 ? null : t.reverted / t.count;
+  const present = (/** @type {Column} */ column) =>
+    column.parts.filter((part) => part.totals.count > 0);
+  return {
+    prs: {
+      label: "PRs",
+      note: "Revert PRs aren't counted.",
+      tileNote: null,
+      value: (totals) => totals.count,
+      stacks: true,
+      averageLabel: "4-period average",
+      minStep: 1,
+      decimals: null,
+      rate: false,
+      tone: "up",
+      summary: (column) => prCount(column.totals),
+    },
+    weighted: {
+      label: "Weighted PRs",
+      note: "Each PR counts √(lines ÷ 100): a 100-line PR counts 1, a 400-line PR counts 2. Revert PRs aren't counted.",
+      tileNote: null,
+      value: (totals) => totals.weighted,
+      stacks: true,
+      averageLabel: "4-period average",
+      minStep: 0.1,
+      decimals: 2,
+      rate: false,
+      tone: "up",
+      summary: (column) =>
+        `${prCount(column.totals)} · ${formatMetric(column.totals.weighted, "weighted")} weighted PRs`,
+    },
+    median: {
+      label: "Median PR size",
+      note: "Lines changed by the middle PR. Context for reading PRs and size-weighted PRs – did PRs get bigger or smaller? Not a target.",
+      tileNote: null,
+      value: (totals) => totals.median,
+      stacks: false,
+      averageLabel: "4-period median",
+      minStep: 1,
+      // Whole lines, half up – see "HTML report" in docs/specs/v1.md.
+      decimals: 0,
+      rate: false,
+      tone: "none",
+      summary: (column) => {
+        const bySeries = present(column).map(
+          (part) =>
+            `${part.series.label} ${formatMetric(part.totals.median, "median")}`,
+        );
+        return column.totals.median === null
+          ? prCount(column.totals)
+          : `${prCount(column.totals)} · median ${formatMetric(column.totals.median, "median")} lines` +
+              (bySeries.length > 0 ? ` (${bySeries.join(", ")})` : "");
+      },
+    },
+    lines: {
+      label: "Lines changed",
+      note: "Added + removed, leaving out the excluded files.",
+      tileNote: null,
+      value: (totals) => totals.lines,
+      stacks: true,
+      averageLabel: "4-period average",
+      minStep: 0,
+      decimals: null,
+      rate: false,
+      tone: "up",
+      summary: (column) =>
+        `${prCount(column.totals)} · ${formatNumber(column.totals.lines)} lines changed`,
+    },
+    reverts: {
+      label: "Revert rate",
+      note: "Recent periods understate the revert rate: their PRs have had less time to be reverted.",
+      tileNote: "recent PRs have had less time to be reverted",
+      value: revertRate,
+      stacks: false,
+      averageLabel: "4-period average",
+      minStep: 0.01,
+      decimals: null,
+      rate: true,
+      tone: "down",
+      summary: (column) => {
+        const bySeries = present(column).map(
+          (part) =>
+            `${part.series.label} ${part.totals.reverted} of ${part.totals.count}`,
+        );
+        return (
+          `${column.totals.reverted} of ${prCount(column.totals)} reverted = ${formatMetric(revertRate(column.totals), "reverts")}` +
+          (bySeries.length > 0 ? ` (${bySeries.join(", ")})` : "")
+        );
+      },
+    },
+  };
 }
 
 /**
@@ -152,7 +254,7 @@ export function assignSeries(rows, keyOf, labelOf) {
 
 /**
  * One column per period with its rows, per-series parts and the 4-period
- * moving average of the total. For revert rate and median PR size the average
+ * moving average of the total. For a metric that doesn't stack the average
  * pools the four periods: reverted ÷ PRs, or the median PR, across them.
  * @param {Row[]} rows
  * @param {string[]} periodKeys
@@ -162,6 +264,7 @@ export function assignSeries(rows, keyOf, labelOf) {
  * @returns {{ columns: Column[], series: Series[] }}
  */
 export function chartModel(rows, periodKeys, period, metric, seriesOf) {
+  const def = metrics()[metric];
   /** @type {Map<string, Row[]>} */
   const byPeriod = new Map(periodKeys.map((key) => [key, []]));
   for (const row of rows) byPeriod.get(periodOf(row.day, period))?.push(row);
@@ -186,14 +289,14 @@ export function chartModel(rows, periodKeys, period, metric, seriesOf) {
       return {
         series: s,
         totals: partTotals,
-        value: metricOf(partTotals, metric),
+        value: def.value(partTotals),
       };
     });
     return {
       key,
       rows: periodRows,
       totals,
-      value: metricOf(totals, metric),
+      value: def.value(totals),
       parts,
       average: null,
     };
@@ -202,15 +305,9 @@ export function chartModel(rows, periodKeys, period, metric, seriesOf) {
   columns.forEach((column, i) => {
     if (i < 3) return;
     const window = columns.slice(i - 3, i + 1);
-    if (metric === "reverts") {
-      const count = window.reduce((sum, c) => sum + c.totals.count, 0);
-      const reverted = window.reduce((sum, c) => sum + c.totals.reverted, 0);
-      column.average = count === 0 ? null : reverted / count;
-    } else if (metric === "median") {
-      column.average = medianLines(window.flatMap((c) => c.rows));
-    } else {
-      column.average = window.reduce((sum, c) => sum + (c.value ?? 0), 0) / 4;
-    }
+    column.average = def.stacks
+      ? window.reduce((sum, c) => sum + (c.value ?? 0), 0) / 4
+      : def.value(totalsOf(window.flatMap((c) => c.rows)));
   });
   return { columns, series };
 }
@@ -221,17 +318,16 @@ export function chartModel(rows, periodKeys, period, metric, seriesOf) {
  * @returns {{ step: number, max: number }}
  */
 export function niceTicks(max, metric) {
+  const def = metrics()[metric];
   if (!(max > 0))
-    return metric === "reverts" ? { step: 0.25, max: 1 } : { step: 1, max: 4 };
+    return def.rate ? { step: 0.25, max: 1 } : { step: 1, max: 4 };
   const rough = max / 4;
   const power = 10 ** Math.floor(Math.log10(rough));
   const scaled = rough / power;
-  let step = (scaled <= 1 ? 1 : scaled <= 2 ? 2 : scaled <= 5 ? 5 : 10) * power;
-  // Axis labels are whole numbers for PRs and median PR size, tenths for
-  // weighted PRs and whole percent for revert rate.
-  if ((metric === "prs" || metric === "median") && step < 1) step = 1;
-  if (metric === "weighted" && step < 0.1) step = 0.1;
-  if (metric === "reverts" && step < 0.01) step = 0.01;
+  const step = Math.max(
+    def.minStep,
+    (scaled <= 1 ? 1 : scaled <= 2 ? 2 : scaled <= 5 ? 5 : 10) * power,
+  );
   return { step, max: Math.ceil(max / step - 1e-9) * step };
 }
 
@@ -253,7 +349,8 @@ export function formatNumber(n, decimals = 0) {
  */
 export function formatMetric(value, metric, compact = false) {
   if (value === null) return "–";
-  if (metric === "reverts") {
+  const def = metrics()[metric];
+  if (def.rate) {
     const pct = Math.round(value * 1000) / 10;
     return `${formatNumber(pct, compact || Number.isInteger(pct) ? 0 : 1)}%`;
   }
@@ -262,9 +359,8 @@ export function formatMetric(value, metric, compact = false) {
     const short = value / divisor;
     return `${formatNumber(short, Number.isInteger(short) ? 0 : 1)}${suffix}`;
   }
-  if (metric === "weighted" && !compact) return formatNumber(value, 2);
-  // Whole lines, half up – see "HTML report" in docs/specs/v1.md.
-  if (metric === "median" && !compact) return formatNumber(Math.round(value));
+  if (def.decimals !== null && !compact)
+    return formatNumber(value, def.decimals);
   return formatNumber(value, Number.isInteger(value) ? 0 : 1);
 }
 
@@ -395,8 +491,7 @@ export function loadView(key, defaults, allowAuthorSplit, bounds) {
       pick(saved.period, ["day", "week", "month"]) ?? defaults.period
     ),
     metric: /** @type {Metric} */ (
-      pick(saved.metric, ["prs", "weighted", "median", "lines", "reverts"]) ??
-        defaults.metric
+      pick(saved.metric, Object.keys(metrics())) ?? defaults.metric
     ),
     split: /** @type {Split} */ (
       pick(
@@ -466,10 +561,8 @@ export function drawChart(
   const plotWidth = width - margin.left - margin.right;
   const plotHeight = height - margin.top - margin.bottom;
   const slot = plotWidth / columns.length;
-  // Revert rate and median PR size don't stack – see "HTML report" in
-  // docs/specs/v1.md.
-  const sideBySide =
-    (metric === "reverts" || metric === "median") && series.length > 0;
+  const def = metrics()[metric];
+  const sideBySide = !def.stacks && series.length > 0;
 
   let max = 0;
   for (const column of columns) {
@@ -619,17 +712,15 @@ export function drawChart(
     tooltip.append(
       h("div", { class: "tt-head" }, [periodLabel(column.key, period, false)]),
     );
-    const total =
-      metric === "reverts"
-        ? `${formatMetric(column.value, metric)} (${column.totals.reverted} of ${column.totals.count} PRs reverted)`
-        : formatMetric(column.value, metric);
+    const total = def.rate
+      ? `${formatMetric(column.value, metric)} (${column.totals.reverted} of ${column.totals.count} PRs reverted)`
+      : formatMetric(column.value, metric);
     tooltip.append(h("div", { class: "tt-total" }, [total]));
     for (const part of column.parts) {
       if (part.totals.count === 0) continue;
-      const value =
-        metric === "reverts"
-          ? `${formatMetric(part.value, metric)} (${part.totals.reverted}/${part.totals.count})`
-          : formatMetric(part.value, metric);
+      const value = def.rate
+        ? `${formatMetric(part.value, metric)} (${part.totals.reverted}/${part.totals.count})`
+        : formatMetric(part.value, metric);
       tooltip.append(
         h("div", { class: "tt-row" }, [
           h("span", {
@@ -645,7 +736,7 @@ export function drawChart(
       tooltip.append(
         h("div", { class: "tt-row" }, [
           h("span", { class: "line-key", style: "background:var(--average)" }),
-          metric === "median" ? "4-period median" : "4-period average",
+          def.averageLabel,
           h("strong", {}, [formatMetric(column.average, metric)]),
         ]),
       );
@@ -712,38 +803,16 @@ export function drawDetails(column, period, metric, showAuthor) {
   }
   const counted = column.rows.filter((row) => !row.is_revert);
   const reverts = column.rows.length - counted.length;
-  const t = column.totals;
   title.textContent = `PRs merged ${period === "day" ? "on" : "in"} ${periodLabel(column.key, period, false).replace(/^Week/, "the week")}`;
-  const present = column.parts.filter((part) => part.totals.count > 0);
-  const bySeries = present.map(
-    (part) =>
-      `${part.series.label} ${part.totals.reverted} of ${part.totals.count}`,
-  );
-  const medianBySeries = present.map(
-    (part) =>
-      `${part.series.label} ${formatMetric(part.totals.median, "median")}`,
-  );
-  const prs = `${t.count} PR${t.count === 1 ? "" : "s"}`;
-  const figures = {
-    prs,
-    weighted: `${prs} · ${formatMetric(t.weighted, "weighted")} weighted PRs`,
-    median:
-      t.median === null
-        ? prs
-        : `${prs} · median ${formatMetric(t.median, "median")} lines` +
-          (medianBySeries.length > 0 ? ` (${medianBySeries.join(", ")})` : ""),
-    lines: `${prs} · ${formatNumber(t.lines)} lines changed`,
-    reverts:
-      `${t.reverted} of ${prs} reverted = ${formatMetric(column.value, "reverts")}` +
-      (bySeries.length > 0 ? ` (${bySeries.join(", ")})` : ""),
-  };
+  const defs = metrics();
   summary.textContent =
-    figures[metric] +
+    defs[metric].summary(column) +
     (reverts > 0
       ? ` · ${reverts} revert PR${reverts === 1 ? "" : "s"} merged here, not counted`
       : "");
   if (counted.length === 0) return;
 
+  const weightedLabel = defs.weighted.label;
   const head = [
     "Merged",
     "Repo",
@@ -751,9 +820,9 @@ export function drawDetails(column, period, metric, showAuthor) {
     "Title",
     ...(showAuthor ? ["Author"] : []),
     "Lines",
-    "Weighted PRs",
+    weightedLabel,
   ];
-  const numeric = new Set(["PR", "Lines", "Weighted PRs"]);
+  const numeric = new Set(["PR", "Lines", weightedLabel]);
   const thead = h("thead", {}, [
     h(
       "tr",
@@ -804,39 +873,27 @@ export function drawDetails(column, period, metric, showAuthor) {
 export function drawTiles(current, previous, previousLabel) {
   const tiles = byId("tiles");
   tiles.replaceChildren();
-  /** @type {{ label: string, metric: Metric, note?: string }[]} */
-  const specs = [
-    { label: "PRs", metric: "prs" },
-    { label: "Weighted PRs", metric: "weighted" },
-    { label: "Median PR size", metric: "median" },
-    { label: "Lines changed", metric: "lines" },
-    {
-      label: "Revert rate",
-      metric: "reverts",
-      note: "recent PRs have had less time to be reverted",
-    },
-  ];
-  for (const spec of specs) {
-    const value = metricOf(current, spec.metric);
+  const defs = metrics();
+  for (const metric of /** @type {Metric[]} */ (Object.keys(defs))) {
+    const def = defs[metric];
+    const value = def.value(current);
     const delta = h("div", { class: "tile-delta" });
-    const before = previous ? metricOf(previous, spec.metric) : null;
+    const before = previous ? def.value(previous) : null;
     if (previous && value !== null && before !== null) {
       // Weighted PRs are float sums whose last bits depend on the order the
       // PRs were added, so equal totals can differ by a rounding error.
       const diff = Math.abs(value - before) < 1e-9 ? 0 : value - before;
-      const upIsGood = spec.metric !== "reverts";
-      // Median PR size has no tone – see "HTML report" in docs/specs/v1.md.
       const tone =
-        diff === 0 || spec.metric === "median"
+        diff === 0 || def.tone === "none"
           ? ""
-          : diff > 0 === upIsGood
+          : diff > 0 === (def.tone === "up")
             ? "good"
             : "bad";
       let text;
-      if (spec.metric === "reverts") {
+      if (def.rate) {
         text = `${formatNumber(Math.abs(diff) * 100, 1)} pts`;
       } else if (before === 0) {
-        text = `${formatMetric(Math.abs(diff), spec.metric)}`;
+        text = `${formatMetric(Math.abs(diff), metric)}`;
       } else {
         text = `${formatNumber(Math.abs(diff / before) * 100)}%`;
       }
@@ -850,14 +907,16 @@ export function drawTiles(current, previous, previousLabel) {
     }
     tiles.append(
       h("div", { class: "tile" }, [
-        h("div", { class: "tile-label" }, [spec.label]),
+        h("div", { class: "tile-label" }, [def.label]),
         h("div", { class: "tile-value" }, [
-          spec.metric === "reverts" && value !== null
-            ? `${formatMetric(value, "reverts")} (${current.reverted}/${current.count})`
-            : formatMetric(value, spec.metric),
+          def.rate && value !== null
+            ? `${formatMetric(value, metric)} (${current.reverted}/${current.count})`
+            : formatMetric(value, metric),
         ]),
-        ...(delta.childNodes.length > 0 || !spec.note ? [delta] : []),
-        ...(spec.note ? [h("div", { class: "tile-delta" }, [spec.note])] : []),
+        ...(delta.childNodes.length > 0 || !def.tileNote ? [delta] : []),
+        ...(def.tileNote
+          ? [h("div", { class: "tile-delta" }, [def.tileNote])]
+          : []),
       ]),
     );
   }
@@ -1029,13 +1088,9 @@ export function main(scan) {
     ),
     segmented(
       "metrics",
-      [
-        ["prs", "PRs"],
-        ["weighted", "Weighted PRs"],
-        ["median", "Median PR size"],
-        ["lines", "Lines changed"],
-        ["reverts", "Revert rate"],
-      ],
+      Object.entries(metrics()).map(
+        ([key, def]) => /** @type {[string, string]} */ ([key, def.label]),
+      ),
       () => view.metric,
       (value) => {
         view.metric = /** @type {Metric} */ (value);
@@ -1091,24 +1146,6 @@ export function main(scan) {
     view.hiddenRepos = [...repoNames];
     render();
   });
-
-  const metricNames = {
-    prs: "PRs",
-    weighted: "Weighted PRs",
-    median: "Median PR size",
-    lines: "Lines changed",
-    reverts: "Revert rate",
-  };
-  const notes = {
-    prs: "Revert PRs aren't counted.",
-    weighted:
-      "Each PR counts √(lines ÷ 100): a 100-line PR counts 1, a 400-line PR counts 2. Revert PRs aren't counted.",
-    median:
-      "Lines changed by the middle PR. Context for reading PRs and size-weighted PRs – did PRs get bigger or smaller? Not a target.",
-    lines: "Added + removed, leaving out the excluded files.",
-    reverts:
-      "Recent periods understate the revert rate: their PRs have had less time to be reverted.",
-  };
 
   const drawChartAndDetails = () => {
     const chart = byId("chart");
@@ -1191,9 +1228,9 @@ export function main(scan) {
     if (selected && !model.columns.some((c) => c.key === selected))
       selected = null;
 
-    byId("chart-title").textContent =
-      `${metricNames[view.metric]} per ${view.period}`;
-    byId("chart-note").textContent = notes[view.metric];
+    const def = metrics()[view.metric];
+    byId("chart-title").textContent = `${def.label} per ${view.period}`;
+    byId("chart-note").textContent = def.note;
     const legend = byId("legend");
     legend.replaceChildren();
     const barSeries =
@@ -1202,7 +1239,7 @@ export function main(scan) {
         : [
             {
               key: "total",
-              label: metricNames[view.metric],
+              label: def.label,
               colour: "var(--series-1)",
             },
           ];
@@ -1218,7 +1255,7 @@ export function main(scan) {
       legend.append(
         h("span", {}, [
           h("span", { class: "line-key", style: "background:var(--average)" }),
-          view.metric === "median" ? "4-period median" : "4-period average",
+          def.averageLabel,
         ]),
       );
     }
