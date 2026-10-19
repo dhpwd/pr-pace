@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, relative, resolve, sep } from "node:path";
 import { describe, test } from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
@@ -107,6 +107,21 @@ describe("inlined report modules", () => {
       );
     });
     assert.deepEqual(findings, []);
+  });
+
+  test("export no name twice, since the page declares them all in one script", async () => {
+    /** @type {Map<string, string[]>} */
+    const exporters = new Map();
+    for (const file of inlinedModules()) {
+      for (const name of Object.keys(await import(pathToFileURL(file).href))) {
+        const path = relativePath(ROOT, file);
+        exporters.set(name, [...(exporters.get(name) ?? []), path]);
+      }
+    }
+    const repeated = [...exporters]
+      .filter(([, files]) => files.length > 1)
+      .map(([name, files]) => `${name}: ${files.join(", ")}`);
+    assert.deepEqual(repeated, []);
   });
 });
 
