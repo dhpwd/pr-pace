@@ -23,6 +23,7 @@ function pr(fields) {
     method: "squash",
     author_name: "Dev One",
     author_email: "dev@example.com",
+    agent_email: null,
     merged_at: "2026-10-19T08:00:00-04:00",
     added: 100,
     removed: 0,

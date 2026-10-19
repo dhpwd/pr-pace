@@ -31,6 +31,7 @@ function row(fields) {
     method: "squash",
     author_name: "Dev One",
     author_email: "dev@example.com",
+    agent_email: null,
     merged_at: "2026-10-05T10:00:00+00:00",
     added: 0,
     removed: 0,

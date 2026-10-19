@@ -36,6 +36,7 @@ import { formatInstant, zoneFormatter } from "./time.js";
  * @property {'squash' | 'merge'} method
  * @property {string} author_name
  * @property {string} author_email
+ * @property {string | null} agent_email
  * @property {string} merged_at
  * @property {number} added
  * @property {number} removed
@@ -64,13 +65,16 @@ import { formatInstant, zoneFormatter } from "./time.js";
  * @property {string} message
  * @property {FileChange[]} files
  *
- * @typedef {Commit & { method: 'squash' | 'merge', number: number, title: string, isRevert: boolean, revertedBy: string | null }} Pr
+ * @typedef {Commit & { method: 'squash' | 'merge', number: number, title: string, isRevert: boolean, revertedBy: string | null, agentEmail: string | null }} Pr
+ *
+ * @typedef {{ name: string, email: string }} Identity
  */
 
 const FIELD = "\x1f";
 const RECORD = "\x1e";
 const LOG_FORMAT = "%x1e%H%x1f%P%x1f%aN%x1f%aE%x1f%ct%x1f%B%x1f";
 const LOG_FIELDS = 6;
+const TIP_FORMAT = "%x1e%H%x1f%aN%x1f%aE%x1f%B";
 
 const BRANCH_CANDIDATES = [
   "refs/remotes/origin/HEAD",
@@ -86,6 +90,34 @@ const PR_SUFFIX = /\(#(\d+)\)\s*$/;
 const REVERTS_COMMIT = /This reverts commit ([0-9a-fA-F]{7,64})/g;
 const REVERT_PREFIX = 'Revert "';
 const REVERT_QUOTE = /^Revert "(.*)"/s;
+
+// Agent identities, matched on the lowercased email after .mailmap. A PR whose
+// git author is one counts for the first person its Co-authored-by: trailers
+// name – see "Detecting PRs" in docs/specs/v1.md.
+const GITHUB_APP_BOT = /^\d+\+[^@]*\[bot\]@users\.noreply\.github\.com$/;
+const AGENT_EMAILS = new Set([
+  // GitHub Copilot coding agent: squash author and branch commit author
+  "198982749+copilot@users.noreply.github.com",
+  // Cursor's cloud agents: branch commit author
+  "cursoragent@cursor.com",
+  // Cursor's cloud agents: branch commit author, a rarer variant
+  "cursor-agent@cursor.com",
+]);
+// The coding agents the no-match warning's hint names, by lowercased email or
+// GitHub no-reply login (the part between "+" and "@"). Never dependency or
+// automation bots, whose PRs would count for whoever maps them to themselves.
+const CODING_AGENTS = new Set([
+  "198982749+copilot@users.noreply.github.com",
+  "cursoragent@cursor.com",
+  "cursor-agent@cursor.com",
+  "copilot-swe-agent[bot]",
+  "devin-ai-integration[bot]",
+  "cursor[bot]",
+  "google-labs-jules[bot]",
+]);
+const NOREPLY_LOGIN = /^\d+\+([^@]*)@users\.noreply\.github\.com$/;
+const CO_AUTHOR = /^co-authored-by:\s*(\S.*?)\s*<([^<>]*)>$/i;
+const MAPPED_CONTACT = /^(.*?)\s*<([^<>]*)>\s*$/;
 
 /** @param {string} text */
 function stripPrSuffix(text) {
@@ -295,6 +327,36 @@ function resolveBranch(repoPath, override) {
   };
 }
 
+/** @param {Identity} identity an empty name gives `<email>` */
+function contact({ name, email }) {
+  return name ? `${name} <${email}>` : `<${email}>`;
+}
+
+/**
+ * Maps identities, name and email together, through the repo's .mailmap in
+ * one call, keyed by their `Name <email>` form. Unmapped if the call fails.
+ * @param {string} repoPath
+ * @param {Identity[]} identities
+ * @returns {Map<string, Identity>}
+ */
+function mapIdentities(repoPath, identities) {
+  const byContact = new Map(
+    identities.map((identity) => [contact(identity), identity]),
+  );
+  if (byContact.size === 0) return byContact;
+  const contacts = [...byContact.keys()];
+  const mapped = git(repoPath, ["check-mailmap", "--stdin"], {
+    input: `${contacts.join("\n")}\n`,
+  });
+  if (!mapped.ok) return byContact;
+  const lines = mapped.stdout.split("\n");
+  contacts.forEach((key, i) => {
+    const match = MAPPED_CONTACT.exec(lines[i] ?? "");
+    if (match) byContact.set(key, { name: match[1], email: match[2] });
+  });
+  return byContact;
+}
+
 /**
  * Maps emails through the repo's .mailmap in one call.
  * @param {string} repoPath
@@ -302,15 +364,10 @@ function resolveBranch(repoPath, override) {
  * @returns {string[]}
  */
 function mapEmails(repoPath, emails) {
-  if (emails.length === 0) return [];
-  const mapped = git(repoPath, [
-    "check-mailmap",
-    ...emails.map((email) => `<${email}>`),
-  ]);
-  if (!mapped.ok) return emails;
-  const lines = mapped.stdout.split("\n");
-  return emails.map(
-    (email, i) => /<([^>]*)>\s*$/.exec(lines[i] ?? "")?.[1] ?? email,
+  const identities = emails.map((email) => ({ name: "", email }));
+  const mapped = mapIdentities(repoPath, identities);
+  return identities.map(
+    (identity) => mapped.get(contact(identity))?.email ?? identity.email,
   );
 }
 
@@ -398,49 +455,125 @@ function linguistExcluded(repoPath, ref, paths, warnings) {
 }
 
 /**
- * Authors of each merge PR's branch tip, in one batched call.
+ * Authors of each merge PR's branch tip, in one batched call that also reads
+ * the tips' messages.
  * @param {string} repoPath
  * @param {Pr[]} merges
  * @param {string[]} warnings
+ * @returns {Map<string, string>} each branch tip's message, by merge PR SHA
  */
 function applyBranchAuthors(repoPath, merges, warnings) {
-  if (merges.length === 0) return;
+  /** @type {Map<string, string>} */
+  const messages = new Map();
+  if (merges.length === 0) return messages;
   const listed = git(
     repoPath,
-    ["log", "--no-walk=unsorted", "--stdin", "--format=%H%x1f%aN%x1f%aE"],
+    ["log", "--no-walk=unsorted", "--stdin", `--format=${TIP_FORMAT}`],
     { input: `${merges.map((pr) => pr.parents[1]).join("\n")}\n` },
   );
   if (!listed.ok) {
     warnings.push(
-      `couldn't read merge PRs' branch commits (${listed.error}) – their authors are the merge commits' authors`,
+      `couldn't read merge PRs' branch commits (${listed.error}) – their authors are the merge commits' authors, and none is credited to a co-author`,
     );
-    return;
+    return messages;
   }
-  /** @type {Map<string, { name: string, email: string }>} */
-  const authors = new Map();
-  for (const line of listed.stdout.split("\n")) {
-    const [sha, name, email] = line.split(FIELD);
-    if (sha) authors.set(sha, { name, email });
+  /** @type {Map<string, Identity & { message: string }>} */
+  const tips = new Map();
+  for (const record of listed.stdout.split(RECORD).slice(1)) {
+    const [sha, name, email, message] = record.split(FIELD);
+    tips.set(sha, { name, email, message });
   }
   for (const pr of merges) {
-    const author = authors.get(pr.parents[1]);
-    if (author) {
-      pr.authorName = author.name;
-      pr.authorEmail = author.email;
+    const tip = tips.get(pr.parents[1]);
+    if (tip) {
+      pr.authorName = tip.name;
+      pr.authorEmail = tip.email;
+      messages.set(pr.sha, tip.message);
+    }
+  }
+  return messages;
+}
+
+/** @param {string} email after .mailmap */
+function isAgent(email) {
+  const lower = email.toLowerCase();
+  return GITHUB_APP_BOT.test(lower) || AGENT_EMAILS.has(lower);
+}
+
+/** @param {string} email after .mailmap */
+function isCodingAgent(email) {
+  const lower = email.toLowerCase();
+  const login = NOREPLY_LOGIN.exec(lower)?.[1];
+  return (
+    CODING_AGENTS.has(lower) ||
+    (login !== undefined && CODING_AGENTS.has(login))
+  );
+}
+
+/**
+ * Every `Co-authored-by:` trailer in a message, in order. They're read from
+ * any line, as a squash message can hold them outside its final trailer
+ * block.
+ * @param {string} message
+ * @returns {Identity[]}
+ */
+function coAuthors(message) {
+  /** @type {Identity[]} */
+  const found = [];
+  for (const line of message.split("\n")) {
+    const match = CO_AUTHOR.exec(line.trim());
+    const email = match?.[2].trim();
+    if (match && email) found.push({ name: match[1], email });
+  }
+  return found;
+}
+
+/**
+ * Credits each PR whose git author is an agent to the first person its
+ * `Co-authored-by:` trailers name: the squash commit's, or the merge PR's
+ * branch tip's. A PR with no such person keeps the agent as its author.
+ * @param {string} repoPath
+ * @param {Pr[]} prs
+ * @param {Map<string, string>} tipMessages from applyBranchAuthors
+ */
+function creditCoAuthors(repoPath, prs, tipMessages) {
+  /** @type {{ pr: Pr, trailers: Identity[] }[]} */
+  const candidates = [];
+  for (const pr of prs) {
+    if (!isAgent(pr.authorEmail)) continue;
+    pr.agentEmail = pr.authorEmail;
+    const message =
+      pr.method === "squash" ? pr.message : tipMessages.get(pr.sha);
+    const trailers = message === undefined ? [] : coAuthors(message);
+    if (trailers.length > 0) candidates.push({ pr, trailers });
+  }
+  const mapped = mapIdentities(
+    repoPath,
+    candidates.flatMap(({ trailers }) => trailers),
+  );
+  for (const { pr, trailers } of candidates) {
+    const person = trailers
+      .map((trailer) => mapped.get(contact(trailer)) ?? trailer)
+      .find((identity) => !isAgent(identity.email));
+    if (person) {
+      pr.authorName = person.name;
+      pr.authorEmail = person.email;
     }
   }
 }
 
 /**
+ * The five most frequent PR authors.
  * @param {Pr[]} prs
  */
 function topAuthors(prs) {
-  /** @type {Map<string, { label: string, count: number }>} */
+  /** @type {Map<string, { label: string, email: string, count: number }>} */
   const counts = new Map();
   for (const pr of prs) {
     const key = pr.authorEmail.toLowerCase();
     const entry = counts.get(key) ?? {
       label: `${pr.authorName} <${pr.authorEmail}>`,
+      email: pr.authorEmail,
       count: 0,
     };
     entry.count++;
@@ -448,8 +581,26 @@ function topAuthors(prs) {
   }
   return [...counts.values()]
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
-    .slice(0, 5)
-    .map(({ label, count }) => `${label} (${count})`);
+    .slice(0, 5);
+}
+
+/**
+ * The warning for a repo whose PRs in range match no author filter, with a
+ * hint for each coding agent among the authors it lists.
+ * @param {Pr[]} prs
+ */
+function noMatchWarning(prs) {
+  const top = topAuthors(prs);
+  const warning = `no PRs match the author filter. Most frequent PR authors: ${top.map(({ label, count }) => `${label} (${count})`).join(", ")} – pass --author to choose`;
+  const agents = top
+    .filter(({ email }) => isCodingAgent(email))
+    .map(({ label }) => label);
+  if (agents.length === 0) return warning;
+  if (agents.length === 1) {
+    return `${warning}. ${agents[0]} is a coding agent with no co-author naming a person on these PRs – if only you use it, pass --author with its email or map it to yourself in .mailmap, otherwise turn on the agent's setting that adds you as co-author`;
+  }
+  const named = `${agents.slice(0, -1).join(", ")} and ${agents[agents.length - 1]}`;
+  return `${warning}. ${named} are coding agents with no co-author naming a person on these PRs – if only you use them, pass --author with their emails or map them to yourself in .mailmap, otherwise turn on each agent's setting that adds you as co-author`;
 }
 
 /**
@@ -518,7 +669,13 @@ function scanRepo(repoPath, name, options, excludePath, formatter) {
     const detected = classify(commit);
     if (detected) {
       /** @type {Pr} */
-      const pr = { ...commit, ...detected, isRevert: false, revertedBy: null };
+      const pr = {
+        ...commit,
+        ...detected,
+        isRevert: false,
+        revertedBy: null,
+        agentEmail: null,
+      };
       allPrs.push(pr);
       prsBySha.set(pr.sha, pr);
     } else {
@@ -532,20 +689,19 @@ function scanRepo(repoPath, name, options, excludePath, formatter) {
     (options.sinceMs === null || time >= options.sinceMs) &&
     (options.untilMs === null || time < options.untilMs);
   const prsInRange = allPrs.filter((pr) => inRange(pr.time));
-  applyBranchAuthors(
+  const tipMessages = applyBranchAuthors(
     repoPath,
     prsInRange.filter((pr) => pr.method === "merge"),
     warnings,
   );
+  creditCoAuthors(repoPath, prsInRange, tipMessages);
 
   const filter = authorFilter(repoPath, options, warnings);
   const prs = prsInRange.filter((pr) =>
     filter.matches(pr.authorName, pr.authorEmail),
   );
   if (prsInRange.length > 0 && prs.length === 0 && !options.allAuthors) {
-    warnings.push(
-      `no PRs match the author filter. Most frequent PR authors: ${topAuthors(prsInRange).join(", ")} – pass --author to choose`,
-    );
+    warnings.push(noMatchWarning(prsInRange));
   }
 
   const paths = [
@@ -602,6 +758,7 @@ function toResult(pr, repoName, isExcluded, formatter) {
     method: pr.method,
     author_name: pr.authorName,
     author_email: pr.authorEmail,
+    agent_email: pr.agentEmail,
     merged_at: formatInstant(pr.time, formatter),
     added,
     removed,
