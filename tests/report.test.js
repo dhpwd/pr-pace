@@ -231,41 +231,6 @@ describe("report figures", () => {
     assert.equal(load({ metric: "retired" }).metric, "prs");
   });
 
-  test("metrics run in display order", () => {
-    assert.deepEqual(
-      Object.entries(metrics()).map(([key, def]) => [key, def.label]),
-      [
-        ["prs", "PRs"],
-        ["weighted", "Weighted PRs"],
-        ["median", "Median PR size"],
-        ["lines", "Lines changed"],
-        ["reverts", "Revert rate"],
-      ],
-    );
-  });
-
-  test("median PR size and revert rate don't stack, revert rate is the only rate, and tone follows which way is good", () => {
-    const defs = Object.entries(metrics());
-    assert.deepEqual(
-      defs.filter(([, def]) => !def.stacks).map(([key]) => key),
-      ["median", "reverts"],
-    );
-    assert.deepEqual(
-      defs.filter(([, def]) => def.rate).map(([key]) => key),
-      ["reverts"],
-    );
-    assert.deepEqual(
-      Object.fromEntries(defs.map(([key, def]) => [key, def.tone])),
-      {
-        prs: "up",
-        weighted: "up",
-        median: "none",
-        lines: "up",
-        reverts: "down",
-      },
-    );
-  });
-
   test("controls are remembered per set of scanned repos", () => {
     /** @type {Map<string, string>} */
     const stored = new Map();
@@ -303,6 +268,41 @@ describe("report figures", () => {
     } finally {
       Reflect.deleteProperty(globalThis, "localStorage");
     }
+  });
+
+  test("metrics run in display order", () => {
+    assert.deepEqual(
+      Object.entries(metrics()).map(([key, def]) => [key, def.label]),
+      [
+        ["prs", "PRs"],
+        ["weighted", "Weighted PRs"],
+        ["median", "Median PR size"],
+        ["lines", "Lines changed"],
+        ["reverts", "Revert rate"],
+      ],
+    );
+  });
+
+  test("median PR size and revert rate don't stack, revert rate is the only rate, and tone follows which way is good", () => {
+    const entries = Object.entries(metrics());
+    assert.deepEqual(
+      entries.filter(([, def]) => !def.stacks).map(([key]) => key),
+      ["median", "reverts"],
+    );
+    assert.deepEqual(
+      entries.filter(([, def]) => def.rate).map(([key]) => key),
+      ["reverts"],
+    );
+    assert.deepEqual(
+      Object.fromEntries(entries.map(([key, def]) => [key, def.tone])),
+      {
+        prs: "up",
+        weighted: "up",
+        median: "none",
+        lines: "up",
+        reverts: "down",
+      },
+    );
   });
 
   test("axis ticks never repeat a label", () => {

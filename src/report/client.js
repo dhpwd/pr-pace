@@ -26,11 +26,9 @@ import {
  * @typedef {{ count: number, weighted: number, median: number | null, lines: number, reverted: number }} Totals
  * @typedef {{ series: Series, totals: Totals, value: number | null }} Part
  * @typedef {{ key: string, rows: Row[], totals: Totals, value: number | null, parts: Part[], average: number | null }} Column
- */
-
-/**
+ *
  * @typedef {object} MetricDef
- * @property {string} label the control option, chart title, tile label and single-series legend entry
+ * @property {string} label the control option, chart title, tile label and single-series legend entry, and weighted PRs' PR list column header
  * @property {string} note the chart note
  * @property {string | null} tileNote
  * @property {(totals: Totals) => number | null} value
@@ -93,14 +91,15 @@ export function totalsOf(rows) {
 }
 
 /**
- * The report's metrics in display order. Revert rate and median PR size don't
- * stack, and median PR size has no tone – see "HTML report" in
+ * The report's metrics, in display order – see "HTML report" in
  * docs/specs/v1.md.
  * @returns {Record<Metric, MetricDef>}
  */
 export function metrics() {
   const prCount = (/** @type {Totals} */ t) =>
     `${t.count} PR${t.count === 1 ? "" : "s"}`;
+  const revertRate = (/** @type {Totals} */ t) =>
+    t.count === 0 ? null : t.reverted / t.count;
   const present = (/** @type {Column} */ column) =>
     column.parts.filter((part) => part.totals.count > 0);
   return {
@@ -172,8 +171,7 @@ export function metrics() {
       label: "Revert rate",
       note: "Recent periods understate the revert rate: their PRs have had less time to be reverted.",
       tileNote: "recent PRs have had less time to be reverted",
-      value: (totals) =>
-        totals.count === 0 ? null : totals.reverted / totals.count,
+      value: revertRate,
       stacks: false,
       averageLabel: "4-period average",
       minStep: 0.01,
@@ -186,7 +184,7 @@ export function metrics() {
             `${part.series.label} ${part.totals.reverted} of ${part.totals.count}`,
         );
         return (
-          `${column.totals.reverted} of ${prCount(column.totals)} reverted = ${formatMetric(column.value, "reverts")}` +
+          `${column.totals.reverted} of ${prCount(column.totals)} reverted = ${formatMetric(revertRate(column.totals), "reverts")}` +
           (bySeries.length > 0 ? ` (${bySeries.join(", ")})` : "")
         );
       },
