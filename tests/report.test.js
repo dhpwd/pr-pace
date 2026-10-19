@@ -7,6 +7,7 @@ import {
   formatMetric,
   loadView,
   metaLine,
+  metrics,
   niceTicks,
   presetRange,
   previousRange,
@@ -223,8 +224,46 @@ describe("report figures", () => {
       "12m",
     );
     assert.equal(load({ split: "author" }).split, "none");
+    for (const metric of Object.keys(metrics())) {
+      assert.equal(load({ metric }).metric, metric);
+    }
     // A metric an older report offered and this one doesn't.
     assert.equal(load({ metric: "retired" }).metric, "prs");
+  });
+
+  test("metrics run in display order", () => {
+    assert.deepEqual(
+      Object.entries(metrics()).map(([key, def]) => [key, def.label]),
+      [
+        ["prs", "PRs"],
+        ["weighted", "Weighted PRs"],
+        ["median", "Median PR size"],
+        ["lines", "Lines changed"],
+        ["reverts", "Revert rate"],
+      ],
+    );
+  });
+
+  test("median PR size and revert rate don't stack, revert rate is the only rate, and tone follows which way is good", () => {
+    const defs = Object.entries(metrics());
+    assert.deepEqual(
+      defs.filter(([, def]) => !def.stacks).map(([key]) => key),
+      ["median", "reverts"],
+    );
+    assert.deepEqual(
+      defs.filter(([, def]) => def.rate).map(([key]) => key),
+      ["reverts"],
+    );
+    assert.deepEqual(
+      Object.fromEntries(defs.map(([key, def]) => [key, def.tone])),
+      {
+        prs: "up",
+        weighted: "up",
+        median: "none",
+        lines: "up",
+        reverts: "down",
+      },
+    );
   });
 
   test("controls are remembered per set of scanned repos", () => {
@@ -267,22 +306,19 @@ describe("report figures", () => {
   });
 
   test("axis ticks never repeat a label", () => {
-    for (const metric of /** @type {const} */ ([
-      "prs",
-      "weighted",
-      "median",
-      "lines",
-      "reverts",
-    ])) {
+    const defs = metrics();
+    for (const metric of /** @type {import('../src/report/client.js').Metric[]} */ (
+      Object.keys(defs)
+    )) {
       for (const max of [
         0.004, 0.012, 0.02, 0.03, 0.07, 0.15, 0.3, 0.5, 1, 1.5, 3, 7, 208.5,
       ]) {
-        if (metric === "reverts" && max > 1) continue;
+        if (defs[metric].rate && max > 1) continue;
         // Every bar is a whole number of lines, so a chart's largest is 0 or 1+.
         if (metric === "lines" && max < 1) continue;
         const { step, max: top } = niceTicks(max, metric);
-        // PRs and median PR size never tick on a fraction.
-        if (metric === "prs" || metric === "median") {
+        // A whole minimum step never ticks on a fraction.
+        if (defs[metric].minStep >= 1) {
           assert.ok(Number.isInteger(step), `${metric} ${max}`);
         }
         const labels = [];
