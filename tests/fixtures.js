@@ -134,15 +134,25 @@ export class Repo {
   }
 
   /**
-   * Commits on the current branch.
+   * Commits on the current branch. `verbatim` keeps the message as given,
+   * where git would otherwise strip trailing whitespace such as CRs.
    * @param {string} message
-   * @param {{ files?: Record<string, string | Buffer | null>, author?: Identity, date?: string }} [options]
+   * @param {{ files?: Record<string, string | Buffer | null>, author?: Identity, date?: string, verbatim?: boolean }} [options]
    */
-  commit(message, { files = {}, author = DEV, date } = {}) {
+  commit(message, { files = {}, author = DEV, date, verbatim = false } = {}) {
     this.write(files);
     const when = this.tick(date);
     this.gitAs(author, when, "add", "-A");
-    this.gitAs(author, when, "commit", "-q", "--allow-empty", "-m", message);
+    this.gitAs(
+      author,
+      when,
+      "commit",
+      "-q",
+      "--allow-empty",
+      ...(verbatim ? ["--cleanup=verbatim"] : []),
+      "-m",
+      message,
+    );
     return this.rev("HEAD");
   }
 
@@ -150,7 +160,7 @@ export class Repo {
    * Lands a squash-merged PR on main.
    * @param {number} number
    * @param {string} title
-   * @param {{ files?: Record<string, string | Buffer | null>, author?: Identity, date?: string, body?: string }} [options]
+   * @param {{ files?: Record<string, string | Buffer | null>, author?: Identity, date?: string, body?: string, verbatim?: boolean }} [options]
    */
   squash(number, title, options = {}) {
     const message = `${title} (#${number})${options.body ? `\n\n${options.body}` : ""}`;

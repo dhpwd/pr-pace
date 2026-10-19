@@ -779,7 +779,7 @@ describe("agent PRs", () => {
     });
   });
 
-  test("a mixed-case Co-Authored-By: with extra spacing is read", () => {
+  test("a mixed-case Co-Authored-By: with extra spacing or CRLF line endings is read", () => {
     const repo = newRepo();
     repo.commit("Initial commit");
     repo.squash(1, "Fix the parser", {
@@ -787,9 +787,21 @@ describe("agent PRs", () => {
       files: files(),
       body: `Details.\n\n   Co-Authored-By:   ${OTHER.name}   <${OTHER.email}>`,
     });
+    repo.squash(2, "Fix the lexer", {
+      author: CURSOR,
+      files: files(),
+      body: `Details.\r\n\r\n${trailers(OTHER)}\r\n`,
+      verbatim: true,
+    });
     assert.equal(
-      pr(scanRepo(repo, { allAuthors: true }), 1).author_email,
-      OTHER.email,
+      repo.git("log", "-1", "--format=%B").includes("\r\n"),
+      true,
+      "the fixture kept the CRLF line endings",
+    );
+    const result = scanRepo(repo, { allAuthors: true });
+    assert.deepEqual(
+      result.prs.map((row) => row.author_email),
+      [OTHER.email, OTHER.email],
     );
   });
 
@@ -802,10 +814,10 @@ describe("agent PRs", () => {
       files: files(),
       body: trailers(COPILOT_COMMITS),
     });
-    repo.squash(3, "No email given", {
+    repo.squash(3, "No email or no name given", {
       author: CURSOR,
       files: files(),
-      body: "Co-authored-by: Other Person <>",
+      body: `Co-authored-by: ${OTHER.name} <>\nCo-authored-by: <${OTHER.email}>`,
     });
     assert.deepEqual(scanRepo(repo, { allAuthors: true }).prs.map(credit), [
       { name: DEVIN.name, email: DEVIN.email, agent: DEVIN.email },
@@ -831,8 +843,11 @@ describe("agent PRs", () => {
       email: "12345678+dev-one@users.noreply.github.com",
     };
     const repo = newRepo();
+    // Keyed on the name too, so it matches only if the name is passed.
     repo.commit("Initial commit", {
-      files: { ".mailmap": `${DEV.name} <${DEV.email}> <${noreply.email}>\n` },
+      files: {
+        ".mailmap": `${DEV.name} <${DEV.email}> ${noreply.name} <${noreply.email}>\n`,
+      },
     });
     repo.squash(1, "Agent work", {
       author: CURSOR,

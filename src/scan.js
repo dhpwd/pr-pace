@@ -103,18 +103,21 @@ const AGENT_EMAILS = new Set([
   // Cursor's cloud agents: branch commit author, a rarer variant
   "cursor-agent@cursor.com",
 ]);
-// The coding agents the no-match warning's hint names: AGENT_EMAILS and these
-// GitHub no-reply logins. Never dependency or automation bots, whose PRs
-// would count for whoever maps them to themselves.
-const CODING_AGENT_LOGINS = new Set([
+// The coding agents the no-match warning's hint names, by lowercased email or
+// GitHub no-reply login (the part between "+" and "@"). Never dependency or
+// automation bots, whose PRs would count for whoever maps them to themselves.
+const CODING_AGENTS = new Set([
+  "198982749+copilot@users.noreply.github.com",
+  "cursoragent@cursor.com",
+  "cursor-agent@cursor.com",
   "copilot-swe-agent[bot]",
   "devin-ai-integration[bot]",
   "cursor[bot]",
   "google-labs-jules[bot]",
 ]);
 const NOREPLY_LOGIN = /^\d+\+([^@]*)@users\.noreply\.github\.com$/;
-const CO_AUTHOR = /^co-authored-by:\s*(.*?)\s*<([^<>]*)>$/i;
-const CONTACT = /^(.*?)\s*<([^<>]*)>\s*$/;
+const CO_AUTHOR = /^co-authored-by:\s*(\S.*?)\s*<([^<>]*)>$/i;
+const MAPPED_CONTACT = /^(.*?)\s*<([^<>]*)>\s*$/;
 
 /** @param {string} text */
 function stripPrSuffix(text) {
@@ -324,26 +327,7 @@ function resolveBranch(repoPath, override) {
   };
 }
 
-/**
- * Maps emails through the repo's .mailmap in one call.
- * @param {string} repoPath
- * @param {string[]} emails
- * @returns {string[]}
- */
-function mapEmails(repoPath, emails) {
-  if (emails.length === 0) return [];
-  const mapped = git(repoPath, [
-    "check-mailmap",
-    ...emails.map((email) => `<${email}>`),
-  ]);
-  if (!mapped.ok) return emails;
-  const lines = mapped.stdout.split("\n");
-  return emails.map(
-    (email, i) => /<([^>]*)>\s*$/.exec(lines[i] ?? "")?.[1] ?? email,
-  );
-}
-
-/** @param {Identity} identity */
+/** @param {Identity} identity an empty name gives `<email>` */
 function contact({ name, email }) {
   return name ? `${name} <${email}>` : `<${email}>`;
 }
@@ -361,15 +345,30 @@ function mapIdentities(repoPath, identities) {
   );
   if (byContact.size === 0) return byContact;
   const contacts = [...byContact.keys()];
-  // A name can start with "-", which git would read as an option.
-  const mapped = git(repoPath, ["check-mailmap", "--", ...contacts]);
+  const mapped = git(repoPath, ["check-mailmap", "--stdin"], {
+    input: `${contacts.join("\n")}\n`,
+  });
   if (!mapped.ok) return byContact;
   const lines = mapped.stdout.split("\n");
   contacts.forEach((key, i) => {
-    const match = CONTACT.exec(lines[i] ?? "");
+    const match = MAPPED_CONTACT.exec(lines[i] ?? "");
     if (match) byContact.set(key, { name: match[1], email: match[2] });
   });
   return byContact;
+}
+
+/**
+ * Maps emails through the repo's .mailmap in one call.
+ * @param {string} repoPath
+ * @param {string[]} emails
+ * @returns {string[]}
+ */
+function mapEmails(repoPath, emails) {
+  const identities = emails.map((email) => ({ name: "", email }));
+  const mapped = mapIdentities(repoPath, identities);
+  return identities.map(
+    (identity) => mapped.get(contact(identity))?.email ?? identity.email,
+  );
 }
 
 /**
@@ -474,7 +473,7 @@ function applyBranchAuthors(repoPath, merges, warnings) {
   );
   if (!listed.ok) {
     warnings.push(
-      `couldn't read merge PRs' branch commits (${listed.error}) – their authors are the merge commits' authors`,
+      `couldn't read merge PRs' branch commits (${listed.error}) – their authors are the merge commits' authors, and none is credited to a co-author`,
     );
     return messages;
   }
@@ -506,8 +505,8 @@ function isCodingAgent(email) {
   const lower = email.toLowerCase();
   const login = NOREPLY_LOGIN.exec(lower)?.[1];
   return (
-    AGENT_EMAILS.has(lower) ||
-    (login !== undefined && CODING_AGENT_LOGINS.has(login))
+    CODING_AGENTS.has(lower) ||
+    (login !== undefined && CODING_AGENTS.has(login))
   );
 }
 
