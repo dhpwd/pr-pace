@@ -701,6 +701,8 @@ describe("agent PRs", () => {
     email: "copilot@github.com",
   };
   const JULES = { name: "Google Jules", email: "jules@google.com" };
+  // An invented tool, for the no-reply@ form.
+  const NO_REPLY_TOOL = { name: "Some AI tool", email: "no-reply@example.com" };
   const files = () => ({ [`f${++counter}.js`]: "x\n" });
 
   /** @param {...import('./fixtures.js').Identity} people */
@@ -902,7 +904,7 @@ describe("agent PRs", () => {
     const tools = [
       COPILOT_APP,
       CODEX,
-      { name: "Some AI tool", email: "no-reply@example.com" },
+      NO_REPLY_TOOL,
       CODEX_ALT,
       AMP,
       GITHUB_COPILOT,
@@ -925,6 +927,22 @@ describe("agent PRs", () => {
         agent: CURSOR.email,
       })),
     );
+  });
+
+  test("a person whose address has noreply later in its local part isn't an AI tool", () => {
+    const person = { name: "Dev One", email: "dev.noreply@example.com" };
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    repo.squash(1, "Agent work", {
+      author: CURSOR,
+      files: files(),
+      body: trailers(person),
+    });
+    assert.deepEqual(credit(pr(scanRepo(repo, { allAuthors: true }), 1)), {
+      name: person.name,
+      email: person.email,
+      agent: CURSOR.email,
+    });
   });
 
   test("an agent PR naming only agents and AI tools keeps the agent, with agent_email set", () => {

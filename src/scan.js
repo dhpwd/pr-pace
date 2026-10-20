@@ -104,9 +104,9 @@ const AGENT_EMAILS = new Set([
   "cursor-agent@cursor.com",
 ]);
 // AI tool identities, matched the same way. An AI tool's own Co-authored-by:
-// trailer names no person, so crediting an agent PR skips it. Nothing else
-// reads these: an AI tool that authors a commit counts as a person.
-const AI_TOOL_NOREPLY = /^no-?reply@/;
+// trailer names no person, so crediting an agent PR skips it, and nothing else
+// reads these – see "Detecting PRs" in docs/specs/v1.md.
+const AI_TOOL_NOREPLY_LOCAL_PART = /^no-?reply@/;
 const AI_TOOL_COPILOT = /^\d+\+copilot@users\.noreply\.github\.com$/;
 const AI_TOOL_EMAILS = new Set([
   // Codex
@@ -525,7 +525,7 @@ function isAgent(email) {
 function isAiTool(email) {
   const lower = email.toLowerCase();
   return (
-    AI_TOOL_NOREPLY.test(lower) ||
+    AI_TOOL_NOREPLY_LOCAL_PART.test(lower) ||
     AI_TOOL_COPILOT.test(lower) ||
     AI_TOOL_EMAILS.has(lower)
   );
