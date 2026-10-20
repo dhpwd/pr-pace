@@ -176,14 +176,14 @@ export function pathExcluder({ includeDocs, globs }) {
     const segments = path.split("/");
     const name = segments[segments.length - 1];
     const lower = name.toLowerCase();
-    if (
-      !includeDocs &&
-      (DOC_NAMES.has(lower) ||
-        LICENCE_WITH_SUFFIX.test(lower) ||
-        (DOC_EXTENSIONS.some((ext) => lower.endsWith(ext)) &&
-          !isConfigTxt(segments)))
-    ) {
-      return true;
+    if (!includeDocs) {
+      if (DOC_NAMES.has(lower) || LICENCE_WITH_SUFFIX.test(lower)) return true;
+      if (
+        DOC_EXTENSIONS.some((ext) => lower.endsWith(ext)) &&
+        !isConfigTxt(segments)
+      ) {
+        return true;
+      }
     }
     if (LOCKFILES.has(name)) return true;
     if (BUILD_SUFFIXES.some((suffix) => lower.endsWith(suffix))) return true;
