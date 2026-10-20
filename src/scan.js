@@ -116,12 +116,10 @@ const CODING_AGENTS = new Set([
   "google-labs-jules[bot]",
 ]);
 const NOREPLY_LOGIN = /^\d+\+([^@]*)@users\.noreply\.github\.com$/;
-// A person's GitHub no-reply address, lowercased, in the `<id>+<login>@` form
-// or the older `<login>@` form, capturing the login.
+// Any GitHub no-reply address, the older id-less `<login>@` form included, and
+// the forms of origin's URL the owner is read from – see "Detecting PRs" in
+// docs/specs/v1.md.
 const NOREPLY_EMAIL = /^(?:\d+\+)?([^@]+)@users\.noreply\.github\.com$/;
-// origin's URL on github.com over HTTPS (with any user part, such as a
-// token), SCP-style SSH or ssh://, capturing the owner. An SSH host alias or
-// ssh.github.com isn't recognised.
 const GITHUB_REMOTE =
   /^(?:https:\/\/(?:[^/@]+@)?github\.com\/|git@github\.com:|ssh:\/\/git@github\.com(?::\d+)?\/)([^/]+)\/[^/]+$/i;
 const CO_AUTHOR = /^co-authored-by:\s*(\S.*?)\s*<([^<>]*)>$/i;
@@ -622,18 +620,16 @@ function noMatchWarning(prs) {
  * @param {(name: string, email: string) => boolean} matches the author filter
  */
 function ownerNoReplyWarnings(repoPath, prs, matches) {
+  /** @param {Pr} pr */
+  const login = (pr) => NOREPLY_EMAIL.exec(pr.authorEmail.toLowerCase())?.[1];
   const missed = prs.filter(
-    (pr) =>
-      NOREPLY_EMAIL.test(pr.authorEmail.toLowerCase()) &&
-      !matches(pr.authorName, pr.authorEmail),
+    (pr) => login(pr) !== undefined && !matches(pr.authorName, pr.authorEmail),
   );
   if (missed.length === 0) return [];
   const url = git(repoPath, ["remote", "get-url", "origin"]).stdout.trim();
   const owner = GITHUB_REMOTE.exec(url)?.[1].toLowerCase();
   if (!owner) return [];
-  const owned = missed.filter(
-    (pr) => NOREPLY_EMAIL.exec(pr.authorEmail.toLowerCase())?.[1] === owner,
-  );
+  const owned = missed.filter((pr) => login(pr) === owner);
   return authorCounts(owned).map(
     ({ label, count }) =>
       `${count} PR${count === 1 ? " credits" : "s credit"} ${label}, the GitHub no-reply address of this repo's owner, which the author filter doesn't match – if it's you, pass it as an extra --author alongside your own email, or map it to your usual identity in .mailmap`,

@@ -1024,14 +1024,16 @@ describe("agent PRs", () => {
     });
 
     test("each origin URL form, the owner in any case and the id-less address all warn", () => {
+      const repo = ownedRepo(ORIGIN);
       for (const url of [
         "git@github.com:Dev-One/app.git",
         "ssh://git@github.com/dev-one/app.git",
         "ssh://git@github.com:22/dev-one/app",
         "https://x-access-token:secret@GitHub.com/dev-one/app",
       ]) {
+        repo.git("remote", "set-url", "origin", url);
         assert.deepEqual(
-          scanRepo(ownedRepo(url)).repos[0].warnings,
+          scanRepo(repo).repos[0].warnings,
           [`1 PR credits ${label(OWNER)}${reason}`],
           url,
         );
@@ -1043,12 +1045,13 @@ describe("agent PRs", () => {
     });
 
     test("no warning for another login, no origin, another host, --all-authors, or an address the filter matches", () => {
+      const owned = ownedRepo(ORIGIN);
       const cases = [
         scanRepo(ownedRepo(ORIGIN, { person: TEAMMATE })),
         scanRepo(ownedRepo(null)),
         scanRepo(ownedRepo("https://gitlab.com/dev-one/app.git")),
-        scanRepo(ownedRepo(ORIGIN), { allAuthors: true }),
-        scanRepo(ownedRepo(ORIGIN), { authors: [DEV.email, OWNER.email] }),
+        scanRepo(owned, { allAuthors: true }),
+        scanRepo(owned, { authors: [DEV.email, OWNER.email] }),
         scanRepo(
           ownedRepo(ORIGIN, {
             initial: {
