@@ -39,7 +39,7 @@ Everything is read from local history, so no token or API access is needed.
 
 ## Install
 
-Needs Node 20 or later and git. With git older than 2.40 the `.gitattributes` exclusions are skipped, with a warning. From a checkout of this repo:
+Needs Node 22 or later and git. With git older than 2.40 the `.gitattributes` exclusions are skipped, with a warning. From a checkout of this repo:
 
 ```sh
 npm install --global .

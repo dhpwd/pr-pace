@@ -30,8 +30,10 @@ export const LINGUIST_ATTRIBUTES = [
 /**
  * Compiles a glob to a RegExp over a whole path or segment. Supports `*`
  * (within a segment), `**` (across segments) and `?`. Everything else is
- * literal. Written by hand for the Node 20 floor – see "Implementation
- * constraints" in docs/specs/v1.md.
+ * literal. Written by hand because `path.matchesGlob` is missing or
+ * experimental on early Node 22 releases, and because it applies minimatch
+ * syntax rather than the `--exclude` syntax the spec defines – see
+ * "Implementation constraints" in docs/specs/v1.md.
  * @param {string} glob
  */
 function globToRegExp(glob) {

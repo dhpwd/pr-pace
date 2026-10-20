@@ -71,10 +71,10 @@ describe("help", () => {
     assert.ok(report.stdout.includes(AUTHOR_HELP), report.stdout);
   });
 
-  test("the package installs the command as pr-pace, on Node 20 or later, with no runtime dependencies", () => {
+  test("the package installs the command as pr-pace, on Node 22 or later, with no runtime dependencies", () => {
     assert.equal(PKG.name, "pr-pace");
     assert.deepEqual(PKG.bin, { "pr-pace": "bin/pr-pace.js" });
-    assert.equal(PKG.engines.node, ">=20");
+    assert.equal(PKG.engines.node, ">=22");
     assert.equal(PKG.dependencies, undefined);
     assert.match(readFileSync(BIN, "utf8"), /^#!\/usr\/bin\/env node\n/);
     assert.match(run("--version").stdout, /^\d+\.\d+\.\d+\n$/);
