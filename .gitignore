@@ -1,3 +1,4 @@
 node_modules/
 pr-pace.html
 .claude/agent-memory/
+.claude/agent-memory-local/
