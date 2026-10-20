@@ -685,6 +685,14 @@ describe("agent PRs", () => {
     name: "Codex",
     email: "267193182+codex@users.noreply.github.com",
   };
+  const GEMINI = {
+    name: "Gemini",
+    email: "200291788+gemini-code-assist@users.noreply.github.com",
+  };
+  const GEMINI_IDLESS = {
+    name: "Gemini",
+    email: "gemini-code-assist@users.noreply.github.com",
+  };
   const CURSOR = { name: "Cursor Agent", email: "cursoragent@cursor.com" };
   const CURSOR_ALT = { name: "Cursor Agent", email: "cursor-agent@cursor.com" };
   const DEPENDABOT = {
@@ -815,6 +823,29 @@ describe("agent PRs", () => {
     });
   });
 
+  test("a merge-commit PR whose branch tip Gemini's account wrote, by either form, counts for the person the tip names", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    const agents = [GEMINI, GEMINI_IDLESS];
+    agents.forEach((agent, i) =>
+      repo.mergePR(i + 1, `Work ${i + 1}`, {
+        author: agent,
+        commits: [
+          { message: `Draft ${i + 1}`, files: files() },
+          { message: `Work ${i + 1}\n\n${trailers(DEV)}`, files: files() },
+        ],
+      }),
+    );
+    assert.deepEqual(
+      scanRepo(repo).prs.map(credit),
+      agents.map((agent) => ({
+        name: DEV.name,
+        email: DEV.email,
+        agent: agent.email,
+      })),
+    );
+  });
+
   test("the first person named wins, after any agent trailers, and the PR counts once", () => {
     const repo = newRepo();
     repo.commit("Initial commit");
@@ -836,6 +867,27 @@ describe("agent PRs", () => {
     const repo = newRepo();
     repo.commit("Initial commit");
     const agents = [CODEX_AGENT, CODEX_ACCOUNT];
+    agents.forEach((agent, i) =>
+      repo.squash(i + 1, `Work ${i + 1}`, {
+        author: COPILOT,
+        files: files(),
+        body: trailers(agent, OTHER),
+      }),
+    );
+    assert.deepEqual(
+      scanRepo(repo, { allAuthors: true }).prs.map(credit),
+      agents.map(() => ({
+        name: OTHER.name,
+        email: OTHER.email,
+        agent: COPILOT.email,
+      })),
+    );
+  });
+
+  test("a trailer from Gemini's account, by either form, before the person is skipped as an agent", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    const agents = [GEMINI, GEMINI_IDLESS];
     agents.forEach((agent, i) =>
       repo.squash(i + 1, `Work ${i + 1}`, {
         author: COPILOT,
@@ -1127,6 +1179,18 @@ describe("agent PRs", () => {
     });
     assert.deepEqual(scanRepo(repo).repos[0].warnings, [
       `no PRs match the author filter. Most frequent PR authors: ${label(CODEX_ACCOUNT)} (1) – pass --author to choose, once for each of your identities. ${label(CODEX_ACCOUNT)} is a coding agent with no co-author naming a person on these PRs – if only you use it, pass its email as an extra --author alongside your own or map it to yourself in .mailmap, otherwise turn on the agent's setting that adds you as co-author`,
+    ]);
+  });
+
+  test("the no-match warning's hint names Gemini's account on a merge-commit PR", () => {
+    const repo = newRepo({ email: "nobody@example.com" });
+    repo.commit("Initial commit");
+    repo.mergePR(1, "One", {
+      author: GEMINI,
+      commits: [{ message: "One", files: files() }],
+    });
+    assert.deepEqual(scanRepo(repo).repos[0].warnings, [
+      "no PRs match the author filter. Most frequent PR authors: Gemini <200291788+gemini-code-assist@users.noreply.github.com> (1) – pass --author to choose, once for each of your identities. Gemini <200291788+gemini-code-assist@users.noreply.github.com> is a coding agent with no co-author naming a person on these PRs – if only you use it, pass its email as an extra --author alongside your own or map it to yourself in .mailmap, otherwise turn on the agent's setting that adds you as co-author",
     ]);
   });
 
