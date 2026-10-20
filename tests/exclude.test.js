@@ -92,6 +92,8 @@ describe("default exclusions", () => {
       "LICENSE-APACHE",
       "licence_mit",
       "COPYRIGHT-2026",
+      "COPYING_GPL",
+      "a/b/LICENSE-MIT",
     ]) {
       assert.equal(excluded(path), true, path);
     }
@@ -193,6 +195,7 @@ describe("default exclusions", () => {
     const withDocs = pathExcluder({ includeDocs: true, globs: [] });
     assert.equal(withDocs("LICENSE"), false);
     assert.equal(withDocs("README"), false);
+    assert.equal(withDocs("LICENSE-MIT"), false);
     for (const name of LOCKFILES) assert.equal(withDocs(name), true, name);
   });
 });
