@@ -70,19 +70,18 @@ function globToRegExp(glob) {
  */
 export function globMatcher(glob) {
   const withoutTrailing = glob.replace(/\/+$/, "");
-  const foldersOnly = withoutTrailing !== glob;
+  const end = glob.endsWith("/") ? -1 : undefined;
   const anchored = withoutTrailing.includes("/");
   const regexp = globToRegExp(withoutTrailing.replace(/^\/+/, ""));
-  /** @param {string} path */
-  const segmentsOf = (path) => {
-    const segments = path.split("/");
-    return foldersOnly ? segments.slice(0, -1) : segments;
-  };
   if (!anchored) {
-    return (path) => segmentsOf(path).some((segment) => regexp.test(segment));
+    return (path) =>
+      path
+        .split("/")
+        .slice(0, end)
+        .some((segment) => regexp.test(segment));
   }
   return (path) => {
-    const segments = segmentsOf(path);
+    const segments = path.split("/").slice(0, end);
     for (let i = 1; i <= segments.length; i++) {
       if (regexp.test(segments.slice(0, i).join("/"))) return true;
     }
