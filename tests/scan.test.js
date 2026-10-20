@@ -1190,7 +1190,7 @@ describe("agent PRs", () => {
       commits: [{ message: "One", files: files() }],
     });
     assert.deepEqual(scanRepo(repo).repos[0].warnings, [
-      "no PRs match the author filter. Most frequent PR authors: Gemini <200291788+gemini-code-assist@users.noreply.github.com> (1) – pass --author to choose, once for each of your identities. Gemini <200291788+gemini-code-assist@users.noreply.github.com> is a coding agent with no co-author naming a person on these PRs – if only you use it, pass its email as an extra --author alongside your own or map it to yourself in .mailmap, otherwise turn on the agent's setting that adds you as co-author",
+      `no PRs match the author filter. Most frequent PR authors: ${label(GEMINI)} (1) – pass --author to choose, once for each of your identities. ${label(GEMINI)} is a coding agent with no co-author naming a person on these PRs – if only you use it, pass its email as an extra --author alongside your own or map it to yourself in .mailmap, otherwise turn on the agent's setting that adds you as co-author`,
     ]);
   });
 
