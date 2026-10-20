@@ -2,8 +2,118 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { globMatcher, pathExcluder } from "../src/exclude.js";
 
+const LOCKFILES = [
+  "package-lock.json",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+  "bun.lock",
+  "bun.lockb",
+  "Cargo.lock",
+  "poetry.lock",
+  "uv.lock",
+  "Gemfile.lock",
+  "composer.lock",
+  "go.sum",
+  "npm-shrinkwrap.json",
+  "deno.lock",
+  "Pipfile.lock",
+  "pdm.lock",
+  "pixi.lock",
+  "Package.resolved",
+  "flake.lock",
+  "MODULE.bazel.lock",
+  ".terraform.lock.hcl",
+  "mise.lock",
+  "Manifest.toml",
+  "JuliaManifest.toml",
+  "Gopkg.lock",
+  "glide.lock",
+  "pubspec.lock",
+  "mix.lock",
+  "Podfile.lock",
+  "gradle.lockfile",
+  "buildscript-gradle.lockfile",
+  "packages.lock.json",
+  "go.work.sum",
+  "pylock.toml",
+  "Cartfile.resolved",
+  "shard.lock",
+  "rebar.lock",
+  "stack.yaml.lock",
+  "renv.lock",
+  "conan.lock",
+  "paket.lock",
+];
+
+const DOC_NAMES = [
+  "LICENSE",
+  "LICENCE",
+  "UNLICENSE",
+  "UNLICENCE",
+  "COPYING",
+  "COPYRIGHT",
+  "PATENTS",
+  "NOTICE",
+  "AUTHORS",
+  "COPYING.LESSER",
+  "COPYING.LIB",
+  "README",
+  "CHANGELOG",
+  "CHANGES",
+  "CONTRIBUTING",
+  "NEWS",
+  "THANKS",
+];
+
 describe("default exclusions", () => {
   const excluded = pathExcluder({ includeDocs: false, globs: [] });
+
+  test("leave out every listed lockfile at any depth, matching its case exactly", () => {
+    for (const name of LOCKFILES) {
+      assert.equal(excluded(name), true, name);
+      assert.equal(excluded(`a/b/${name}`), true, `a/b/${name}`);
+    }
+    assert.equal(excluded("pubspec.LOCK"), false);
+  });
+
+  test("leave out licence, notice and docs files by name, ignoring case", () => {
+    for (const name of DOC_NAMES) {
+      for (const path of [
+        name,
+        name.toLowerCase(),
+        `a/b/${name}`,
+        `a/b/${name.toLowerCase()}`,
+      ]) {
+        assert.equal(excluded(path), true, path);
+      }
+    }
+    for (const path of [
+      "LICENSE-MIT",
+      "LICENSE-APACHE",
+      "licence_mit",
+      "COPYRIGHT-2026",
+    ]) {
+      assert.equal(excluded(path), true, path);
+    }
+  });
+
+  test("count files whose names only resemble a docs name", () => {
+    for (const path of [
+      "install",
+      "INSTALL",
+      "inst/CITATION",
+      "MIT-LICENSE",
+      "license.js",
+      "authors.py",
+      "src/readme.ts",
+      "LICENSE.APACHE",
+      "notices",
+      "README-alpha.sh",
+      "scripts/copyright_header.py",
+    ]) {
+      assert.equal(excluded(path), false, path);
+    }
+  });
 
   test("leave out docs, lockfiles and build output, and keep code, tests and config", () => {
     for (const path of [
@@ -77,6 +187,13 @@ describe("default exclusions", () => {
     const withDocs = pathExcluder({ includeDocs: true, globs: [] });
     assert.equal(withDocs("README.md"), false);
     assert.equal(withDocs("package-lock.json"), true);
+  });
+
+  test("--include-docs counts docs names and keeps every lockfile excluded", () => {
+    const withDocs = pathExcluder({ includeDocs: true, globs: [] });
+    assert.equal(withDocs("LICENSE"), false);
+    assert.equal(withDocs("README"), false);
+    for (const name of LOCKFILES) assert.equal(withDocs(name), true, name);
   });
 });
 

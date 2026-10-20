@@ -1,5 +1,31 @@
 const DOC_EXTENSIONS = [".md", ".mdx", ".markdown", ".rst", ".adoc", ".txt"];
 
+/**
+ * Lower-cased docs file names. The names left off, such as `install` and
+ * `citation`, are under "Lines changed" in docs/specs/v1.md.
+ */
+const DOC_NAMES = new Set([
+  "license",
+  "licence",
+  "unlicense",
+  "unlicence",
+  "copying",
+  "copyright",
+  "patents",
+  "notice",
+  "authors",
+  "copying.lesser",
+  "copying.lib",
+  "readme",
+  "changelog",
+  "changes",
+  "contributing",
+  "news",
+  "thanks",
+]);
+
+const LICENCE_WITH_SUFFIX = /^(?:licen[cs]e|copying|copyright)[-_][^.]*$/;
+
 const CONFIG_TXT_NAMES = new Set(["cmakelists.txt", "robots.txt"]);
 
 const LOCKFILES = new Set([
@@ -14,6 +40,35 @@ const LOCKFILES = new Set([
   "Gemfile.lock",
   "composer.lock",
   "go.sum",
+  "npm-shrinkwrap.json",
+  "deno.lock",
+  "Pipfile.lock",
+  "pdm.lock",
+  "pixi.lock",
+  "Package.resolved",
+  "flake.lock",
+  "MODULE.bazel.lock",
+  ".terraform.lock.hcl",
+  "mise.lock",
+  "Manifest.toml",
+  "JuliaManifest.toml",
+  "Gopkg.lock",
+  "glide.lock",
+  "pubspec.lock",
+  "mix.lock",
+  "Podfile.lock",
+  "gradle.lockfile",
+  "buildscript-gradle.lockfile",
+  "packages.lock.json",
+  "go.work.sum",
+  "pylock.toml",
+  "Cartfile.resolved",
+  "shard.lock",
+  "rebar.lock",
+  "stack.yaml.lock",
+  "renv.lock",
+  "conan.lock",
+  "paket.lock",
 ]);
 
 const BUILD_SUFFIXES = [".min.js", ".min.css", ".map"];
@@ -123,8 +178,10 @@ export function pathExcluder({ includeDocs, globs }) {
     const lower = name.toLowerCase();
     if (
       !includeDocs &&
-      DOC_EXTENSIONS.some((ext) => lower.endsWith(ext)) &&
-      !isConfigTxt(segments)
+      (DOC_NAMES.has(lower) ||
+        LICENCE_WITH_SUFFIX.test(lower) ||
+        (DOC_EXTENSIONS.some((ext) => lower.endsWith(ext)) &&
+          !isConfigTxt(segments)))
     ) {
       return true;
     }
