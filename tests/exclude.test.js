@@ -43,6 +43,11 @@ const LOCKFILES = [
   "renv.lock",
   "conan.lock",
   "paket.lock",
+  "settings-gradle.lockfile",
+  "Chart.lock",
+  "packages-lock.json",
+  "cpanfile.snapshot",
+  "cabal.project.freeze",
 ];
 
 const DOC_NAMES = [
@@ -57,12 +62,14 @@ const DOC_NAMES = [
   "AUTHORS",
   "COPYING.LESSER",
   "COPYING.LIB",
+  "MIT-LICENSE",
   "README",
   "CHANGELOG",
   "CHANGES",
   "CONTRIBUTING",
   "NEWS",
   "THANKS",
+  "TODO",
 ];
 
 describe("default exclusions", () => {
@@ -99,12 +106,25 @@ describe("default exclusions", () => {
     }
   });
 
+  test("leave out RDoc, Textile, Pod and AsciiDoc files, and count site configs named after a domain", () => {
+    for (const path of [
+      "README.rdoc",
+      "docs/guide.TEXTILE",
+      "lib/Foo/Bar.pod",
+      "docs/manual.asciidoc",
+    ]) {
+      assert.equal(excluded(path), true, path);
+    }
+    assert.equal(excluded("lib/Foo/Bar.pm"), false);
+    assert.equal(excluded("nginx/sites-available/example.org"), false);
+  });
+
   test("count files whose names only resemble a docs name", () => {
     for (const path of [
       "install",
       "INSTALL",
       "inst/CITATION",
-      "MIT-LICENSE",
+      "bin/check-license",
       "license.js",
       "authors.py",
       "src/readme.ts",

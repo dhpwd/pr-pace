@@ -1,4 +1,15 @@
-const DOC_EXTENSIONS = [".md", ".mdx", ".markdown", ".rst", ".adoc", ".txt"];
+const DOC_EXTENSIONS = [
+  ".md",
+  ".mdx",
+  ".markdown",
+  ".rst",
+  ".adoc",
+  ".asciidoc",
+  ".rdoc",
+  ".textile",
+  ".pod",
+  ".txt",
+];
 
 /**
  * Lower-cased docs file names. The names left off, such as `install` and
@@ -16,12 +27,14 @@ const DOC_NAMES = new Set([
   "authors",
   "copying.lesser",
   "copying.lib",
+  "mit-license",
   "readme",
   "changelog",
   "changes",
   "contributing",
   "news",
   "thanks",
+  "todo",
 ]);
 
 const LICENCE_WITH_SUFFIX = /^(?:licen[cs]e|copying|copyright)[-_][^.]*$/;
@@ -69,6 +82,11 @@ const LOCKFILES = new Set([
   "renv.lock",
   "conan.lock",
   "paket.lock",
+  "settings-gradle.lockfile",
+  "Chart.lock",
+  "packages-lock.json",
+  "cpanfile.snapshot",
+  "cabal.project.freeze",
 ]);
 
 const BUILD_SUFFIXES = [".min.js", ".min.css", ".map"];
