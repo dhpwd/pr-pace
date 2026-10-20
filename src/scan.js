@@ -512,8 +512,9 @@ function applyBranchAuthors(repoPath, merges, warnings) {
 
 /**
  * The id and login of a GitHub no-reply address, `<id>+<login>@` or the older
- * id-less `<login>@` form. Rules over GitHub no-reply addresses test these
- * parts rather than matching the address again, each requiring the id or not.
+ * id-less `<login>@` form – see "Detecting PRs" in docs/specs/v1.md. Rules over
+ * GitHub no-reply addresses test these parts rather than matching the address
+ * again, each requiring the id or not.
  * @param {string} lower a lowercased email
  * @returns {{ id: string | undefined, login: string } | undefined}
  */
