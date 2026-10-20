@@ -117,6 +117,9 @@ describe("--exclude globs", () => {
     assert.equal(api("api/x.js"), true);
     assert.equal(api("api"), false);
     assert.equal(globMatcher("/api")("api"), true);
+    const wildcard = globMatcher("gen*/");
+    assert.equal(wildcard("src/generated/a.ts"), true);
+    assert.equal(wildcard("src/generated.ts"), false);
     const generated = globMatcher("src/**/");
     assert.equal(generated("src/gen/a.ts"), true);
     assert.equal(generated("src/a.ts"), false);
