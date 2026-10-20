@@ -134,8 +134,9 @@ const AI_TOOL_EMAILS = new Set([
   "jules@google.com",
 ]);
 // The coding agents the no-match warning's hint names, by lowercased email or
-// GitHub no-reply login (the part between "+" and "@"). Never dependency or
-// automation bots, whose PRs would count for whoever maps them to themselves.
+// GitHub no-reply login (the part before "@", after any "<id>+"). Never
+// dependency or automation bots, whose PRs would count for whoever maps them
+// to themselves.
 const CODING_AGENTS = new Set([
   ...AGENT_EMAILS,
   "copilot-swe-agent[bot]",
@@ -543,7 +544,7 @@ function isAgent(email) {
   const lower = email.toLowerCase();
   const parts = noReplyParts(lower);
   return (
-    (parts?.id !== undefined && parts.login.endsWith("[bot]")) ||
+    (parts !== undefined && parts.login.endsWith("[bot]")) ||
     AGENT_EMAILS.has(lower)
   );
 }
@@ -565,7 +566,7 @@ function isCodingAgent(email) {
   const parts = noReplyParts(lower);
   return (
     CODING_AGENTS.has(lower) ||
-    (parts?.id !== undefined && CODING_AGENTS.has(parts.login))
+    (parts !== undefined && CODING_AGENTS.has(parts.login))
   );
 }
 

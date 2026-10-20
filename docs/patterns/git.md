@@ -26,4 +26,4 @@
 
 **When to use.** Any new per-commit or per-path information: add a field to `LOG_FORMAT` or batch one stdin call, never loop over commits.
 
-**Checking the count.** `git()` captures git's stderr, so run the CLI with `GIT_TRACE=<absolute file>` and count the `trace: built-in: git <command>` lines in that file per scanned repo. A setup call that runs only under a condition (`git remote get-url origin`) needs one repo that meets it and one that doesn't.
+**Checking the count.** `git()` captures git's stderr, so run the CLI with `GIT_TRACE=<absolute file>` and count the `trace: built-in: git <command>` lines in that file per scanned repo. A setup call that runs only under a condition (`git remote get-url origin`) needs one repo that meets it and one that doesn't. To show a change removes a conditional call, trace the same fixture through the base commit's CLI as well (`git archive -o <file> <base> bin src package.json`, unpacked outside the repo). A trace without the call proves nothing until the base's trace on that fixture shows it.

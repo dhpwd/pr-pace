@@ -664,14 +664,23 @@ describe("authors", () => {
 });
 
 describe("agent PRs", () => {
-  // Public vendor identities: coding agents and a dependency bot.
+  // Public vendor identities: coding agents, a dependency bot and an automation
+  // bot.
   const DEVIN = {
     name: "devin-ai-integration[bot]",
     email: "158243242+devin-ai-integration[bot]@users.noreply.github.com",
   };
+  const DEVIN_IDLESS = {
+    name: "devin-ai-integration[bot]",
+    email: "devin-ai-integration[bot]@users.noreply.github.com",
+  };
   const COPILOT = {
     name: "Copilot",
     email: "198982749+Copilot@users.noreply.github.com",
+  };
+  const COPILOT_IDLESS = {
+    name: "Copilot",
+    email: "copilot@users.noreply.github.com",
   };
   const COPILOT_COMMITS = {
     name: "copilot-swe-agent[bot]",
@@ -698,6 +707,10 @@ describe("agent PRs", () => {
   const DEPENDABOT = {
     name: "dependabot[bot]",
     email: "49699333+dependabot[bot]@users.noreply.github.com",
+  };
+  const GITHUB_ACTIONS_IDLESS = {
+    name: "github-actions[bot]",
+    email: "github-actions[bot]@users.noreply.github.com",
   };
   // Public AI tool identities, as their own Co-authored-by: trailers name them.
   const CLAUDE = { name: "Claude", email: "noreply@anthropic.com" };
@@ -846,6 +859,26 @@ describe("agent PRs", () => {
     );
   });
 
+  test("a merge-commit PR whose branch tip github-actions[bot]'s id-less address wrote counts for the person the tip names", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    repo.mergePR(4, "Add the widget", {
+      author: GITHUB_ACTIONS_IDLESS,
+      commits: [
+        { message: "Draft the widget", files: files() },
+        {
+          message: `Add the widget\n\n${trailers(DEV)}`,
+          files: files(),
+        },
+      ],
+    });
+    assert.deepEqual(credit(pr(scanRepo(repo), 4)), {
+      name: DEV.name,
+      email: DEV.email,
+      agent: GITHUB_ACTIONS_IDLESS.email,
+    });
+  });
+
   test("the first person named wins, after any agent trailers, and the PR counts once", () => {
     const repo = newRepo();
     repo.commit("Initial commit");
@@ -903,6 +936,21 @@ describe("agent PRs", () => {
         agent: COPILOT.email,
       })),
     );
+  });
+
+  test("a trailer from github-actions[bot]'s id-less address before the person is skipped as an agent", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    repo.squash(1, "Add the widget", {
+      author: COPILOT,
+      files: files(),
+      body: trailers(GITHUB_ACTIONS_IDLESS, OTHER),
+    });
+    assert.deepEqual(credit(pr(scanRepo(repo, { allAuthors: true }), 1)), {
+      name: OTHER.name,
+      email: OTHER.email,
+      agent: COPILOT.email,
+    });
   });
 
   test("a mixed-case Co-Authored-By: with extra spacing or CRLF line endings is read", () => {
@@ -1220,42 +1268,41 @@ describe("agent PRs", () => {
     );
   });
 
-  test("Devin's and Copilot's id-less no-reply addresses aren't agents, coding agents or AI tools", () => {
-    const devinIdLess = {
-      name: DEVIN.name,
-      email: "devin-ai-integration[bot]@users.noreply.github.com",
-    };
-    const copilotIdLess = {
-      name: COPILOT.name,
-      email: "copilot@users.noreply.github.com",
-    };
+  test("an id-less [bot] no-reply address is an agent and, for a coding agent's login, a coding agent", () => {
     const repo = newRepo();
     repo.commit("Initial commit");
     repo.squash(1, "Bot work", {
-      author: devinIdLess,
+      author: DEVIN_IDLESS,
       files: files(),
       body: trailers(OTHER),
     });
-    repo.squash(2, "Agent work", {
-      author: CURSOR,
-      files: files(),
-      body: trailers(copilotIdLess, OTHER),
+    assert.deepEqual(credit(pr(scanRepo(repo, { allAuthors: true }), 1)), {
+      name: OTHER.name,
+      email: OTHER.email,
+      agent: DEVIN_IDLESS.email,
     });
-    assert.deepEqual(scanRepo(repo, { allAuthors: true }).prs.map(credit), [
-      { name: devinIdLess.name, email: devinIdLess.email, agent: null },
-      {
-        name: copilotIdLess.name,
-        email: copilotIdLess.email,
-        agent: CURSOR.email,
-      },
-    ]);
 
     const unmatched = newRepo({ email: "nobody@example.com" });
     unmatched.commit("Initial commit");
-    unmatched.squash(1, "Bot work", { author: devinIdLess, files: files() });
+    unmatched.squash(1, "Bot work", { author: DEVIN_IDLESS, files: files() });
     assert.deepEqual(scanRepo(unmatched).repos[0].warnings, [
-      `no PRs match the author filter. Most frequent PR authors: ${label(devinIdLess)} (1) – pass --author to choose, once for each of your identities`,
+      `no PRs match the author filter. Most frequent PR authors: ${label(DEVIN_IDLESS)} (1) – pass --author to choose, once for each of your identities. ${label(DEVIN_IDLESS)} is a coding agent with no co-author naming a person on these PRs – if only you use it, pass its email as an extra --author alongside your own or map it to yourself in .mailmap, otherwise turn on the agent's setting that adds you as co-author`,
     ]);
+  });
+
+  test("Copilot's id-less no-reply address isn't an AI tool", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    repo.squash(1, "Agent work", {
+      author: CURSOR,
+      files: files(),
+      body: trailers(COPILOT_IDLESS, OTHER),
+    });
+    assert.deepEqual(credit(pr(scanRepo(repo, { allAuthors: true }), 1)), {
+      name: COPILOT_IDLESS.name,
+      email: COPILOT_IDLESS.email,
+      agent: CURSOR.email,
+    });
   });
 
   describe("the repo owner's no-reply address", () => {
