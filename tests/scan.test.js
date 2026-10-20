@@ -981,7 +981,7 @@ describe("agent PRs", () => {
       return repo;
     }
 
-    test("PRs crediting it that the filter misses get a warning, one PR or more", () => {
+    test("PRs crediting it that the filter misses get a warning, one PR or more, under --author too", () => {
       const repo = ownedRepo(ORIGIN);
       const one = scanRepo(repo);
       assert.deepEqual(
@@ -991,6 +991,10 @@ describe("agent PRs", () => {
       assert.deepEqual(one.repos[0].warnings, [
         `1 PR credits ${label(OWNER)}${reason}`,
       ]);
+      assert.deepEqual(
+        scanRepo(repo, { authors: [DEV.email] }).repos[0].warnings,
+        [`1 PR credits ${label(OWNER)}${reason}`],
+      );
       repo.squash(3, "More agent work", {
         author: COPILOT,
         files: files(),
@@ -1044,7 +1048,7 @@ describe("agent PRs", () => {
       );
     });
 
-    test("no warning for another login, no origin, another host, --all-authors, or an address the filter matches", () => {
+    test("no warning for another login, no origin, another host, --all-authors or an address the filter matches", () => {
       const owned = ownedRepo(ORIGIN);
       const cases = [
         scanRepo(ownedRepo(ORIGIN, { person: TEAMMATE })),

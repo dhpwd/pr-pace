@@ -68,6 +68,7 @@ describe("help", () => {
     for (const option of [...scanOptions, "--from", "--open"]) {
       assert.match(report.stdout, new RegExp(`${option}\\b`));
     }
+    assert.ok(report.stdout.includes(AUTHOR_HELP), report.stdout);
   });
 
   test("the package installs the command as pr-pace, on Node 20 or later, with no runtime dependencies", () => {

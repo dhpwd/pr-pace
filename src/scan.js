@@ -614,7 +614,8 @@ function noMatchWarning(prs) {
  * A warning for each GitHub no-reply address of origin's owner that PRs in
  * range count for and the author filter misses – see "Detecting PRs" in
  * docs/specs/v1.md. Reads origin's URL only when some PR counts for a
- * no-reply address the filter misses, so other repos spawn no extra git call.
+ * person's no-reply address the filter misses, so other repos spawn no extra
+ * git call.
  * @param {string} repoPath
  * @param {Pr[]} prs in range, after crediting
  * @param {(name: string, email: string) => boolean} matches the author filter
@@ -623,7 +624,10 @@ function ownerNoReplyWarnings(repoPath, prs, matches) {
   /** @param {Pr} pr */
   const login = (pr) => NOREPLY_EMAIL.exec(pr.authorEmail.toLowerCase())?.[1];
   const missed = prs.filter(
-    (pr) => login(pr) !== undefined && !matches(pr.authorName, pr.authorEmail),
+    (pr) =>
+      login(pr) !== undefined &&
+      !isAgent(pr.authorEmail) &&
+      !matches(pr.authorName, pr.authorEmail),
   );
   if (missed.length === 0) return [];
   const url = git(repoPath, ["remote", "get-url", "origin"]).stdout.trim();

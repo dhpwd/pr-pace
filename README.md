@@ -68,7 +68,7 @@ Scans each path and writes the result as JSON to stdout.
 pr-pace scan ~/code --since 2026-01-01 --out scan.json
 ```
 
-By default it counts the PRs authored by each repo's `git config user.email`. Pass `--author <email|name>` (repeatable) for someone else, or `--all-authors` for a team view. Other options limit the date range, set the folder search depth, override the default branch, fetch first and adjust which files count towards lines changed – `pr-pace scan --help` lists them all.
+By default it counts the PRs authored by each repo's `git config user.email`. Pass `--author <email|name>` for someone else, or `--all-authors` for a team view. Any `--author` replaces that default in every repo, so to count your own PRs under several identities, pass `--author` once for each of them. Other options limit the date range, set the folder search depth, override the default branch, fetch first and adjust which files count towards lines changed – `pr-pace scan --help` lists them all.
 
 ### `pr-pace report [path...]`
 
