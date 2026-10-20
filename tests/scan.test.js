@@ -677,6 +677,10 @@ describe("agent PRs", () => {
     name: "copilot-swe-agent[bot]",
     email: "198982749+Copilot@users.noreply.github.com",
   };
+  const CODEX_AGENT = {
+    name: "openai-code-agent[bot]",
+    email: "242516109+Codex@users.noreply.github.com",
+  };
   const CURSOR = { name: "Cursor Agent", email: "cursoragent@cursor.com" };
   const CURSOR_ALT = { name: "Cursor Agent", email: "cursor-agent@cursor.com" };
   const DEPENDABOT = {
@@ -695,6 +699,15 @@ describe("agent PRs", () => {
   };
   const CODEX = { name: "Codex", email: "noreply@openai.com" };
   const CODEX_ALT = { name: "Codex", email: "codex@openai.com" };
+  const CODEX_ACCOUNT = {
+    name: "Codex",
+    email: "267193182+codex@users.noreply.github.com",
+  };
+  const CODEX_HANDWRITTEN = {
+    name: "Codex",
+    email: "codex@users.noreply.github.com",
+  };
+  const OPENHANDS = { name: "openhands", email: "openhands@all-hands.dev" };
   const AMP = { name: "Amp", email: "amp@ampcode.com" };
   const GITHUB_COPILOT = {
     name: "GitHub Copilot",
@@ -741,10 +754,10 @@ describe("agent PRs", () => {
     });
   });
 
-  test("Copilot's squash address and Cursor's agent addresses are agents too", () => {
+  test("Copilot's squash address, Codex's agent address and Cursor's agent addresses are agents too", () => {
     const repo = newRepo();
     repo.commit("Initial commit");
-    const agents = [COPILOT, CURSOR, CURSOR_ALT];
+    const agents = [COPILOT, CODEX_AGENT, CURSOR, CURSOR_ALT];
     agents.forEach((agent, i) =>
       repo.squash(i + 1, `Work ${i + 1}`, {
         author: agent,
@@ -795,6 +808,21 @@ describe("agent PRs", () => {
     assert.deepEqual(credit(pr(result, 1)), {
       name: DEV.name,
       email: DEV.email,
+      agent: COPILOT.email,
+    });
+  });
+
+  test("Codex's agent trailer before the person is skipped as an agent", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    repo.squash(1, "Add search", {
+      author: COPILOT,
+      files: files(),
+      body: trailers(CODEX_AGENT, OTHER),
+    });
+    assert.deepEqual(credit(pr(scanRepo(repo, { allAuthors: true }), 1)), {
+      name: OTHER.name,
+      email: OTHER.email,
       agent: COPILOT.email,
     });
   });
@@ -906,6 +934,9 @@ describe("agent PRs", () => {
       CODEX,
       NO_REPLY_TOOL,
       CODEX_ALT,
+      CODEX_ACCOUNT,
+      CODEX_HANDWRITTEN,
+      OPENHANDS,
       AMP,
       GITHUB_COPILOT,
       JULES,
@@ -1053,6 +1084,15 @@ describe("agent PRs", () => {
     ]);
   });
 
+  test("the no-match warning's hint names Codex's coding agent", () => {
+    const repo = newRepo({ email: "nobody@example.com" });
+    repo.commit("Initial commit");
+    repo.squash(1, "One", { author: CODEX_AGENT, files: files() });
+    assert.deepEqual(scanRepo(repo).repos[0].warnings, [
+      `no PRs match the author filter. Most frequent PR authors: ${label(CODEX_AGENT)} (1) – pass --author to choose, once for each of your identities. ${label(CODEX_AGENT)} is a coding agent with no co-author naming a person on these PRs – if only you use it, pass its email as an extra --author alongside your own or map it to yourself in .mailmap, otherwise turn on the agent's setting that adds you as co-author`,
+    ]);
+  });
+
   test("the hint names two or more coding agents in one sentence", () => {
     const plural =
       " are coding agents with no co-author naming a person on these PRs – if only you use them, pass their emails as extra --author values alongside your own or map them to yourself in .mailmap, otherwise turn on each agent's setting that adds you as co-author";
@@ -1077,7 +1117,7 @@ describe("agent PRs", () => {
     );
   });
 
-  test("an id-less no-reply address isn't an agent, a coding agent or an AI tool", () => {
+  test("Devin's and Copilot's id-less no-reply addresses aren't agents, coding agents or AI tools", () => {
     const devinIdLess = {
       name: DEVIN.name,
       email: "devin-ai-integration[bot]@users.noreply.github.com",
