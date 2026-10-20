@@ -26,3 +26,17 @@ const result = scan(scanOptions([repo.dir]));
 ## Test file layout
 
 Test files are `tests/*.test.js`, with helpers beside them. `node --test` treats every file under a folder named `test/` as a test file, so the folder is `tests/` to keep helpers such as `fixtures.js` from running as tests.
+
+## Running the suite on the Node floor
+
+**Problem.** `npm run typecheck` checks against `@types/node` 22.x, which follows the newest 22 release. A call to an API added after 22.0 (`URL.parse`, `process.getBuiltinModule`, `parseArgs`'s `allowNegative`) passes the typecheck and the tests on a newer Node, then fails for a user on 22.0.
+
+**Solution.** Run the suite on the floor release itself:
+
+```sh
+npx -y -p node@22.0.0 -- node --test
+```
+
+npm's `node` package supplies the binary. The CLI tests spawn `process.execPath`, so the commands they run are on 22.0.0 too.
+
+**When to use.** A change that calls a Node built-in, or passes a `parseArgs` option, the code doesn't use yet.

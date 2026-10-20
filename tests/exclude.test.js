@@ -113,4 +113,13 @@ describe("--exclude globs", () => {
     assert.equal(globMatcher("a+b(1).js")("a+b(1).js"), true);
     assert.equal(globMatcher("a.js")("abjs"), false);
   });
+
+  test("* matches dotfiles, and brackets, braces and case match literally", () => {
+    assert.equal(globMatcher("*.json")(".eslintrc.json"), true);
+    assert.equal(globMatcher("[ab].js")("[ab].js"), true);
+    assert.equal(globMatcher("[ab].js")("a.js"), false);
+    assert.equal(globMatcher("{a,b}.js")("{a,b}.js"), true);
+    assert.equal(globMatcher("{a,b}.js")("a.js"), false);
+    assert.equal(globMatcher("*.SNAP")("a.snap"), false);
+  });
 });
