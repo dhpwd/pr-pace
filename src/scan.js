@@ -116,6 +116,14 @@ const CODING_AGENTS = new Set([
   "google-labs-jules[bot]",
 ]);
 const NOREPLY_LOGIN = /^\d+\+([^@]*)@users\.noreply\.github\.com$/;
+// A person's GitHub no-reply address, lowercased, in the `<id>+<login>@` form
+// or the older `<login>@` form, capturing the login.
+const NOREPLY_EMAIL = /^(?:\d+\+)?([^@]+)@users\.noreply\.github\.com$/;
+// origin's URL on github.com over HTTPS (with any user part, such as a
+// token), SCP-style SSH or ssh://, capturing the owner. An SSH host alias or
+// ssh.github.com isn't recognised.
+const GITHUB_REMOTE =
+  /^(?:https:\/\/(?:[^/@]+@)?github\.com\/|git@github\.com:|ssh:\/\/git@github\.com(?::\d+)?\/)([^/]+)\/[^/]+$/i;
 const CO_AUTHOR = /^co-authored-by:\s*(\S.*?)\s*<([^<>]*)>$/i;
 const MAPPED_CONTACT = /^(.*?)\s*<([^<>]*)>\s*$/;
 
@@ -410,7 +418,7 @@ function authorFilter(repoPath, options, warnings) {
   ]).stdout.trim();
   if (!configured) {
     warnings.push(
-      "no git config user.email set for this repo, so no PRs count as yours – pass --author or --all-authors",
+      "no git config user.email set for this repo, so no PRs count as yours – pass --author, once for each of your identities, or --all-authors",
     );
     return { matches: () => false, defaultEmail: null };
   }
@@ -563,10 +571,11 @@ function creditCoAuthors(repoPath, prs, tipMessages) {
 }
 
 /**
- * The five most frequent PR authors.
+ * PR counts by author email, most frequent first, each labelled `Name <email>`
+ * from the first PR seen.
  * @param {Pr[]} prs
  */
-function topAuthors(prs) {
+function authorCounts(prs) {
   /** @type {Map<string, { label: string, email: string, count: number }>} */
   const counts = new Map();
   for (const pr of prs) {
@@ -579,28 +588,56 @@ function topAuthors(prs) {
     entry.count++;
     counts.set(key, entry);
   }
-  return [...counts.values()]
-    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
-    .slice(0, 5);
+  return [...counts.values()].sort(
+    (a, b) => b.count - a.count || a.label.localeCompare(b.label),
+  );
 }
 
 /**
- * The warning for a repo whose PRs in range match no author filter, with a
- * hint for each coding agent among the authors it lists.
+ * The warning for a repo whose PRs in range match no author filter, naming the
+ * five most frequent PR authors, with a hint for each coding agent among them.
  * @param {Pr[]} prs
  */
 function noMatchWarning(prs) {
-  const top = topAuthors(prs);
-  const warning = `no PRs match the author filter. Most frequent PR authors: ${top.map(({ label, count }) => `${label} (${count})`).join(", ")} – pass --author to choose`;
+  const top = authorCounts(prs).slice(0, 5);
+  const warning = `no PRs match the author filter. Most frequent PR authors: ${top.map(({ label, count }) => `${label} (${count})`).join(", ")} – pass --author to choose, once for each of your identities`;
   const agents = top
     .filter(({ email }) => isCodingAgent(email))
     .map(({ label }) => label);
   if (agents.length === 0) return warning;
   if (agents.length === 1) {
-    return `${warning}. ${agents[0]} is a coding agent with no co-author naming a person on these PRs – if only you use it, pass --author with its email or map it to yourself in .mailmap, otherwise turn on the agent's setting that adds you as co-author`;
+    return `${warning}. ${agents[0]} is a coding agent with no co-author naming a person on these PRs – if only you use it, pass its email as an extra --author alongside your own or map it to yourself in .mailmap, otherwise turn on the agent's setting that adds you as co-author`;
   }
   const named = `${agents.slice(0, -1).join(", ")} and ${agents[agents.length - 1]}`;
-  return `${warning}. ${named} are coding agents with no co-author naming a person on these PRs – if only you use them, pass --author with their emails or map them to yourself in .mailmap, otherwise turn on each agent's setting that adds you as co-author`;
+  return `${warning}. ${named} are coding agents with no co-author naming a person on these PRs – if only you use them, pass their emails as extra --author values alongside your own or map them to yourself in .mailmap, otherwise turn on each agent's setting that adds you as co-author`;
+}
+
+/**
+ * A warning for each GitHub no-reply address of origin's owner that PRs in
+ * range count for and the author filter misses – see "Detecting PRs" in
+ * docs/specs/v1.md. Reads origin's URL only when some PR counts for a
+ * no-reply address the filter misses, so other repos spawn no extra git call.
+ * @param {string} repoPath
+ * @param {Pr[]} prs in range, after crediting
+ * @param {(name: string, email: string) => boolean} matches the author filter
+ */
+function ownerNoReplyWarnings(repoPath, prs, matches) {
+  const missed = prs.filter(
+    (pr) =>
+      NOREPLY_EMAIL.test(pr.authorEmail.toLowerCase()) &&
+      !matches(pr.authorName, pr.authorEmail),
+  );
+  if (missed.length === 0) return [];
+  const url = git(repoPath, ["remote", "get-url", "origin"]).stdout.trim();
+  const owner = GITHUB_REMOTE.exec(url)?.[1].toLowerCase();
+  if (!owner) return [];
+  const owned = missed.filter(
+    (pr) => NOREPLY_EMAIL.exec(pr.authorEmail.toLowerCase())?.[1] === owner,
+  );
+  return authorCounts(owned).map(
+    ({ label, count }) =>
+      `${count} PR${count === 1 ? " credits" : "s credit"} ${label}, the GitHub no-reply address of this repo's owner, which the author filter doesn't match – if it's you, pass it as an extra --author alongside your own email, or map it to your usual identity in .mailmap`,
+  );
 }
 
 /**
@@ -702,6 +739,11 @@ function scanRepo(repoPath, name, options, excludePath, formatter) {
   );
   if (prsInRange.length > 0 && prs.length === 0 && !options.allAuthors) {
     warnings.push(noMatchWarning(prsInRange));
+  }
+  if (!options.allAuthors) {
+    warnings.push(
+      ...ownerNoReplyWarnings(repoPath, prsInRange, filter.matches),
+    );
   }
 
   const paths = [

@@ -20,6 +20,14 @@ repo.commit("Initial commit");
 repo.squash(1, "Add the first thing", { files: { "a.js": "a\n" } });
 repo.squash(2, "Add the second thing", { files: { "b.js": "b\nc\n" } });
 
+const AUTHOR_HELP = `
+  --author <email|name>   Count only this author: exact match, ignoring case,
+                          after .mailmap. "Name <email>" matches by email.
+                          Repeatable. Default: each repo's git config
+                          user.email. Any --author replaces that default,
+                          so pass it once for each of your identities
+`;
+
 /** @param {...string} args */
 function run(...args) {
   const result = spawnSync(process.execPath, [BIN, ...args], {
@@ -54,6 +62,7 @@ describe("help", () => {
     assert.equal(scan.code, 0);
     for (const option of scanOptions)
       assert.match(scan.stdout, new RegExp(`${option}\\b`));
+    assert.ok(scan.stdout.includes(AUTHOR_HELP), scan.stdout);
     const report = run("report", "-h");
     assert.equal(report.code, 0);
     for (const option of [...scanOptions, "--from", "--open"]) {
@@ -263,6 +272,7 @@ describe("pace", () => {
     ]) {
       assert.match(help.stdout, new RegExp(`${option}\\b`));
     }
+    assert.ok(help.stdout.includes(AUTHOR_HELP), help.stdout);
     for (const option of [
       "--all-authors",
       "--since",

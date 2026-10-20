@@ -908,37 +908,174 @@ describe("agent PRs", () => {
     repo.squash(2, "Two", { author: COPILOT, files: files() });
     repo.squash(3, "Bump", { author: DEPENDABOT, files: files() });
     assert.deepEqual(scanRepo(repo).repos[0].warnings, [
-      `no PRs match the author filter. Most frequent PR authors: ${label(COPILOT)} (2), ${label(DEPENDABOT)} (1) – pass --author to choose. ${label(COPILOT)} is a coding agent with no co-author naming a person on these PRs – if only you use it, pass --author with its email or map it to yourself in .mailmap, otherwise turn on the agent's setting that adds you as co-author`,
+      `no PRs match the author filter. Most frequent PR authors: ${label(COPILOT)} (2), ${label(DEPENDABOT)} (1) – pass --author to choose, once for each of your identities. ${label(COPILOT)} is a coding agent with no co-author naming a person on these PRs – if only you use it, pass its email as an extra --author alongside your own or map it to yourself in .mailmap, otherwise turn on the agent's setting that adds you as co-author`,
     ]);
 
     const bots = newRepo({ email: "nobody@example.com" });
     bots.commit("Initial commit");
     bots.squash(1, "Bump", { author: DEPENDABOT, files: files() });
     assert.deepEqual(scanRepo(bots).repos[0].warnings, [
-      `no PRs match the author filter. Most frequent PR authors: ${label(DEPENDABOT)} (1) – pass --author to choose`,
+      `no PRs match the author filter. Most frequent PR authors: ${label(DEPENDABOT)} (1) – pass --author to choose, once for each of your identities`,
     ]);
   });
 
   test("the hint names two or more coding agents in one sentence", () => {
     const plural =
-      " are coding agents with no co-author naming a person on these PRs – if only you use them, pass --author with their emails or map them to yourself in .mailmap, otherwise turn on each agent's setting that adds you as co-author";
+      " are coding agents with no co-author naming a person on these PRs – if only you use them, pass their emails as extra --author values alongside your own or map them to yourself in .mailmap, otherwise turn on each agent's setting that adds you as co-author";
     const repo = newRepo({ email: "nobody@example.com" });
     repo.commit("Initial commit");
     repo.squash(1, "One", { author: COPILOT, files: files() });
     repo.squash(2, "Two", { author: DEVIN, files: files() });
     const [two] = scanRepo(repo).repos[0].warnings;
     assert.ok(
-      two.endsWith(`choose. ${label(COPILOT)} and ${label(DEVIN)}${plural}`),
+      two.endsWith(
+        `choose, once for each of your identities. ${label(COPILOT)} and ${label(DEVIN)}${plural}`,
+      ),
       two,
     );
     repo.squash(3, "Three", { author: CURSOR, files: files() });
     const [three] = scanRepo(repo).repos[0].warnings;
     assert.ok(
       three.endsWith(
-        `choose. ${label(COPILOT)}, ${label(CURSOR)} and ${label(DEVIN)}${plural}`,
+        `choose, once for each of your identities. ${label(COPILOT)}, ${label(CURSOR)} and ${label(DEVIN)}${plural}`,
       ),
       three,
     );
+  });
+
+  describe("the repo owner's no-reply address", () => {
+    // Invented GitHub identities, in the forms Copilot's trailer and GitHub's
+    // squash commit name a person by.
+    const OWNER = {
+      name: "dev-one",
+      email: "1001+dev-one@users.noreply.github.com",
+    };
+    const OWNER_OLD = {
+      name: "dev-one",
+      email: "dev-one@users.noreply.github.com",
+    };
+    const TEAMMATE = {
+      name: "dev-two",
+      email: "1002+dev-two@users.noreply.github.com",
+    };
+    const ORIGIN = "https://github.com/dev-one/app.git";
+    const reason =
+      ", the GitHub no-reply address of this repo's owner, which the author filter doesn't match – if it's you, pass it as an extra --author alongside your own email, or map it to your usual identity in .mailmap";
+
+    /**
+     * A repo with `origin` at `url` (none when null), one of DEV's own PRs
+     * and a Copilot PR naming `person`.
+     * @param {string | null} url
+     * @param {{ person?: import('./fixtures.js').Identity, email?: string, initial?: Record<string, string> }} [options]
+     */
+    function ownedRepo(url, { person = OWNER, email, initial } = {}) {
+      const repo = newRepo({ email });
+      repo.commit("Initial commit", { files: initial });
+      if (url) repo.git("remote", "add", "origin", url);
+      repo.squash(1, "Own work", { files: files() });
+      repo.squash(2, "Agent work", {
+        author: COPILOT,
+        files: files(),
+        body: trailers(person),
+      });
+      return repo;
+    }
+
+    test("PRs crediting it that the filter misses get a warning, one PR or more", () => {
+      const repo = ownedRepo(ORIGIN);
+      const one = scanRepo(repo);
+      assert.deepEqual(
+        one.prs.map((row) => row.number),
+        [1],
+      );
+      assert.deepEqual(one.repos[0].warnings, [
+        `1 PR credits ${label(OWNER)}${reason}`,
+      ]);
+      repo.squash(3, "More agent work", {
+        author: COPILOT,
+        files: files(),
+        body: trailers(OWNER),
+      });
+      assert.deepEqual(scanRepo(repo).repos[0].warnings, [
+        `2 PRs credit ${label(OWNER)}${reason}`,
+      ]);
+    });
+
+    test("a squash PR GitHub recorded under it warns too, counted with its agent PRs", () => {
+      const repo = newRepo();
+      repo.commit("Initial commit");
+      repo.git("remote", "add", "origin", ORIGIN);
+      repo.squash(1, "Own work", { files: files() });
+      repo.squash(2, "Merged with email privacy on", {
+        author: OWNER,
+        files: files(),
+      });
+      assert.deepEqual(scanRepo(repo).repos[0].warnings, [
+        `1 PR credits ${label(OWNER)}${reason}`,
+      ]);
+      repo.squash(3, "Agent work", {
+        author: COPILOT,
+        files: files(),
+        body: trailers(OWNER),
+      });
+      assert.deepEqual(scanRepo(repo).repos[0].warnings, [
+        `2 PRs credit ${label(OWNER)}${reason}`,
+      ]);
+    });
+
+    test("each origin URL form, the owner in any case and the id-less address all warn", () => {
+      for (const url of [
+        "git@github.com:Dev-One/app.git",
+        "ssh://git@github.com/dev-one/app.git",
+        "ssh://git@github.com:22/dev-one/app",
+        "https://x-access-token:secret@GitHub.com/dev-one/app",
+      ]) {
+        assert.deepEqual(
+          scanRepo(ownedRepo(url)).repos[0].warnings,
+          [`1 PR credits ${label(OWNER)}${reason}`],
+          url,
+        );
+      }
+      assert.deepEqual(
+        scanRepo(ownedRepo(ORIGIN, { person: OWNER_OLD })).repos[0].warnings,
+        [`1 PR credits ${label(OWNER_OLD)}${reason}`],
+      );
+    });
+
+    test("no warning for another login, no origin, another host, --all-authors, or an address the filter matches", () => {
+      const cases = [
+        scanRepo(ownedRepo(ORIGIN, { person: TEAMMATE })),
+        scanRepo(ownedRepo(null)),
+        scanRepo(ownedRepo("https://gitlab.com/dev-one/app.git")),
+        scanRepo(ownedRepo(ORIGIN), { allAuthors: true }),
+        scanRepo(ownedRepo(ORIGIN), { authors: [DEV.email, OWNER.email] }),
+        scanRepo(
+          ownedRepo(ORIGIN, {
+            initial: {
+              ".mailmap": `${DEV.name} <${DEV.email}> <${OWNER.email}>\n`,
+            },
+          }),
+        ),
+      ];
+      for (const result of cases)
+        assert.deepEqual(result.repos[0].warnings, []);
+    });
+
+    test("it warns beside the no-match warning, and beside the no user.email warning", () => {
+      const unmatched = ownedRepo(ORIGIN, { email: "nobody@example.com" });
+      assert.deepEqual(scanRepo(unmatched).repos[0].warnings, [
+        `no PRs match the author filter. Most frequent PR authors: ${label(DEV)} (1), ${label(OWNER)} (1) – pass --author to choose, once for each of your identities`,
+        `1 PR credits ${label(OWNER)}${reason}`,
+      ]);
+
+      const unset = ownedRepo(ORIGIN);
+      unset.git("config", "--unset", "user.email");
+      assert.deepEqual(scanRepo(unset).repos[0].warnings, [
+        "no git config user.email set for this repo, so no PRs count as yours – pass --author, once for each of your identities, or --all-authors",
+        `no PRs match the author filter. Most frequent PR authors: ${label(DEV)} (1), ${label(OWNER)} (1) – pass --author to choose, once for each of your identities`,
+        `1 PR credits ${label(OWNER)}${reason}`,
+      ]);
+    });
   });
 });
 
