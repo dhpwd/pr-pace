@@ -63,19 +63,27 @@ function globToRegExp(glob) {
  * As in .gitignore: a glob without a slash matches any file or folder name at
  * any depth, so `fixtures` drops everything under any `fixtures/`. A leading
  * or inner slash anchors it at the repo root, where it matches a path or any
- * folder above it. A trailing slash alone doesn't anchor.
+ * folder above it. A trailing slash matches folders only, so `build/` skips a
+ * file named `build`. On its own, a trailing slash doesn't anchor.
  * @param {string} glob
  * @returns {(path: string) => boolean}
  */
 export function globMatcher(glob) {
+  const foldersOnly = glob.endsWith("/");
   const withoutTrailing = glob.replace(/\/+$/, "");
   const anchored = withoutTrailing.includes("/");
   const regexp = globToRegExp(withoutTrailing.replace(/^\/+/, ""));
+  /** @param {string} path */
+  const testedSegments = (path) => {
+    const segments = path.split("/");
+    return foldersOnly ? segments.slice(0, -1) : segments;
+  };
   if (!anchored) {
-    return (path) => path.split("/").some((segment) => regexp.test(segment));
+    return (path) =>
+      testedSegments(path).some((segment) => regexp.test(segment));
   }
   return (path) => {
-    const segments = path.split("/");
+    const segments = testedSegments(path);
     for (let i = 1; i <= segments.length; i++) {
       if (regexp.test(segments.slice(0, i).join("/"))) return true;
     }
