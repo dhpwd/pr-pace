@@ -121,7 +121,7 @@ const NOREPLY_LOGIN = /^\d+\+([^@]*)@users\.noreply\.github\.com$/;
 // docs/specs/v1.md.
 const NOREPLY_EMAIL = /^(?:\d+\+)?([^@]+)@users\.noreply\.github\.com$/;
 const GITHUB_REMOTE =
-  /^(?:https:\/\/(?:[^/@]+@)?github\.com\/|git@github\.com:|ssh:\/\/git@github\.com(?::\d+)?\/)([^/]+)\/[^/]+$/i;
+  /^(?:https:\/\/(?:[^/@]+@)?github\.com\/|git@github\.com:|ssh:\/\/git@github\.com(?::\d+)?\/)([^/]+)\/[^/]+\/?$/i;
 const CO_AUTHOR = /^co-authored-by:\s*(\S.*?)\s*<([^<>]*)>$/i;
 const MAPPED_CONTACT = /^(.*?)\s*<([^<>]*)>\s*$/;
 

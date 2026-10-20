@@ -1034,6 +1034,7 @@ describe("agent PRs", () => {
         "ssh://git@github.com/dev-one/app.git",
         "ssh://git@github.com:22/dev-one/app",
         "https://x-access-token:secret@GitHub.com/dev-one/app",
+        "https://github.com/dev-one/app/",
       ]) {
         repo.git("remote", "set-url", "origin", url);
         assert.deepEqual(
