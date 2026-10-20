@@ -681,6 +681,10 @@ describe("agent PRs", () => {
     name: "openai-code-agent[bot]",
     email: "242516109+Codex@users.noreply.github.com",
   };
+  const CODEX_ACCOUNT = {
+    name: "Codex",
+    email: "267193182+codex@users.noreply.github.com",
+  };
   const CURSOR = { name: "Cursor Agent", email: "cursoragent@cursor.com" };
   const CURSOR_ALT = { name: "Cursor Agent", email: "cursor-agent@cursor.com" };
   const DEPENDABOT = {
@@ -699,10 +703,6 @@ describe("agent PRs", () => {
   };
   const CODEX = { name: "Codex", email: "noreply@openai.com" };
   const CODEX_ALT = { name: "Codex", email: "codex@openai.com" };
-  const CODEX_ACCOUNT = {
-    name: "Codex",
-    email: "267193182+codex@users.noreply.github.com",
-  };
   const CODEX_HANDWRITTEN = {
     name: "Codex",
     email: "codex@users.noreply.github.com",
@@ -795,6 +795,26 @@ describe("agent PRs", () => {
     });
   });
 
+  test("a merge-commit PR whose branch tip Codex's codex account wrote counts for the person the tip names", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    repo.mergePR(4, "Add the widget", {
+      author: CODEX_ACCOUNT,
+      commits: [
+        { message: "Draft the widget", files: files() },
+        {
+          message: `Add the widget\n\n${trailers(DEV)}`,
+          files: files(),
+        },
+      ],
+    });
+    assert.deepEqual(credit(pr(scanRepo(repo), 4)), {
+      name: DEV.name,
+      email: DEV.email,
+      agent: CODEX_ACCOUNT.email,
+    });
+  });
+
   test("the first person named wins, after any agent trailers, and the PR counts once", () => {
     const repo = newRepo();
     repo.commit("Initial commit");
@@ -812,19 +832,25 @@ describe("agent PRs", () => {
     });
   });
 
-  test("Codex's agent trailer before the person is skipped as an agent", () => {
+  test("a trailer from Codex's coding agent or its codex account before the person is skipped as an agent", () => {
     const repo = newRepo();
     repo.commit("Initial commit");
-    repo.squash(1, "Add search", {
-      author: COPILOT,
-      files: files(),
-      body: trailers(CODEX_AGENT, OTHER),
-    });
-    assert.deepEqual(credit(pr(scanRepo(repo, { allAuthors: true }), 1)), {
-      name: OTHER.name,
-      email: OTHER.email,
-      agent: COPILOT.email,
-    });
+    const agents = [CODEX_AGENT, CODEX_ACCOUNT];
+    agents.forEach((agent, i) =>
+      repo.squash(i + 1, `Work ${i + 1}`, {
+        author: COPILOT,
+        files: files(),
+        body: trailers(agent, OTHER),
+      }),
+    );
+    assert.deepEqual(
+      scanRepo(repo, { allAuthors: true }).prs.map(credit),
+      agents.map(() => ({
+        name: OTHER.name,
+        email: OTHER.email,
+        agent: COPILOT.email,
+      })),
+    );
   });
 
   test("a mixed-case Co-Authored-By: with extra spacing or CRLF line endings is read", () => {
@@ -934,7 +960,6 @@ describe("agent PRs", () => {
       CODEX,
       NO_REPLY_TOOL,
       CODEX_ALT,
-      CODEX_ACCOUNT,
       CODEX_HANDWRITTEN,
       OPENHANDS,
       AMP,
@@ -1090,6 +1115,18 @@ describe("agent PRs", () => {
     repo.squash(1, "One", { author: CODEX_AGENT, files: files() });
     assert.deepEqual(scanRepo(repo).repos[0].warnings, [
       `no PRs match the author filter. Most frequent PR authors: ${label(CODEX_AGENT)} (1) – pass --author to choose, once for each of your identities. ${label(CODEX_AGENT)} is a coding agent with no co-author naming a person on these PRs – if only you use it, pass its email as an extra --author alongside your own or map it to yourself in .mailmap, otherwise turn on the agent's setting that adds you as co-author`,
+    ]);
+  });
+
+  test("the no-match warning's hint names Codex's codex account on a merge-commit PR", () => {
+    const repo = newRepo({ email: "nobody@example.com" });
+    repo.commit("Initial commit");
+    repo.mergePR(1, "One", {
+      author: CODEX_ACCOUNT,
+      commits: [{ message: "One", files: files() }],
+    });
+    assert.deepEqual(scanRepo(repo).repos[0].warnings, [
+      "no PRs match the author filter. Most frequent PR authors: Codex <267193182+codex@users.noreply.github.com> (1) – pass --author to choose, once for each of your identities. Codex <267193182+codex@users.noreply.github.com> is a coding agent with no co-author naming a person on these PRs – if only you use it, pass its email as an extra --author alongside your own or map it to yourself in .mailmap, otherwise turn on the agent's setting that adds you as co-author",
     ]);
   });
 

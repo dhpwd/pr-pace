@@ -93,13 +93,17 @@ const REVERT_QUOTE = /^Revert "(.*)"/s;
 
 // Agent identities, matched on the lowercased email after .mailmap. A PR whose
 // git author is one counts for the first person its Co-authored-by: trailers
-// name – see "Detecting PRs" in docs/specs/v1.md.
+// name – see "Detecting PRs" in docs/specs/v1.md. Every address here is also a
+// coding agent the no-match warning's hint names.
 const AGENT_EMAILS = new Set([
   // GitHub Copilot coding agent: squash author and branch commit author
   "198982749+copilot@users.noreply.github.com",
   // Codex's coding agent on GitHub (openai-code-agent[bot]): squash author and
   // branch commit author
   "242516109+codex@users.noreply.github.com",
+  // Codex's GitHub account `codex`: branch commit author on PRs it's asked to
+  // edit
+  "267193182+codex@users.noreply.github.com",
   // Cursor's cloud agents: branch commit author
   "cursoragent@cursor.com",
   // Cursor's cloud agents: branch commit author, a rarer variant
@@ -112,9 +116,8 @@ const AI_TOOL_NOREPLY_LOCAL_PART = /^no-?reply@/;
 const AI_TOOL_EMAILS = new Set([
   // Codex
   "codex@openai.com",
-  // Codex, by its GitHub account's no-reply address
-  "267193182+codex@users.noreply.github.com",
-  // Codex, by a hand-written form of that address with no id
+  // Codex, by a hand-written form of its GitHub account's no-reply address,
+  // with no id
   "codex@users.noreply.github.com",
   // OpenHands
   "openhands@all-hands.dev",
@@ -129,10 +132,7 @@ const AI_TOOL_EMAILS = new Set([
 // GitHub no-reply login (the part between "+" and "@"). Never dependency or
 // automation bots, whose PRs would count for whoever maps them to themselves.
 const CODING_AGENTS = new Set([
-  "198982749+copilot@users.noreply.github.com",
-  "242516109+codex@users.noreply.github.com",
-  "cursoragent@cursor.com",
-  "cursor-agent@cursor.com",
+  ...AGENT_EMAILS,
   "copilot-swe-agent[bot]",
   "devin-ai-integration[bot]",
   "cursor[bot]",
