@@ -103,6 +103,21 @@ const AGENT_EMAILS = new Set([
   // Cursor's cloud agents: branch commit author, a rarer variant
   "cursor-agent@cursor.com",
 ]);
+// AI tool identities, matched the same way. An AI tool's own Co-authored-by:
+// trailer names no person, so crediting an agent PR skips it. Nothing else
+// reads these: an AI tool that authors a commit counts as a person.
+const AI_TOOL_NOREPLY = /^no-?reply@/;
+const AI_TOOL_COPILOT = /^\d+\+copilot@users\.noreply\.github\.com$/;
+const AI_TOOL_EMAILS = new Set([
+  // Codex
+  "codex@openai.com",
+  // Amp
+  "amp@ampcode.com",
+  // GitHub Copilot
+  "copilot@github.com",
+  // Google Jules
+  "jules@google.com",
+]);
 // The coding agents the no-match warning's hint names, by lowercased email or
 // GitHub no-reply login (the part between "+" and "@"). Never dependency or
 // automation bots, whose PRs would count for whoever maps them to themselves.
@@ -507,6 +522,16 @@ function isAgent(email) {
 }
 
 /** @param {string} email after .mailmap */
+function isAiTool(email) {
+  const lower = email.toLowerCase();
+  return (
+    AI_TOOL_NOREPLY.test(lower) ||
+    AI_TOOL_COPILOT.test(lower) ||
+    AI_TOOL_EMAILS.has(lower)
+  );
+}
+
+/** @param {string} email after .mailmap */
 function isCodingAgent(email) {
   const lower = email.toLowerCase();
   const login = NOREPLY_LOGIN.exec(lower)?.[1];
@@ -536,8 +561,9 @@ function coAuthors(message) {
 
 /**
  * Credits each PR whose git author is an agent to the first person its
- * `Co-authored-by:` trailers name: the squash commit's, or the merge PR's
- * branch tip's. A PR with no such person keeps the agent as its author.
+ * `Co-authored-by:` trailers name, skipping agents and AI tools: the squash
+ * commit's, or the merge PR's branch tip's. A PR with no such person keeps
+ * the agent as its author.
  * @param {string} repoPath
  * @param {Pr[]} prs
  * @param {Map<string, string>} tipMessages from applyBranchAuthors
@@ -560,7 +586,9 @@ function creditCoAuthors(repoPath, prs, tipMessages) {
   for (const { pr, trailers } of candidates) {
     const person = trailers
       .map((trailer) => mapped.get(contact(trailer)) ?? trailer)
-      .find((identity) => !isAgent(identity.email));
+      .find(
+        (identity) => !isAgent(identity.email) && !isAiTool(identity.email),
+      );
     if (person) {
       pr.authorName = person.name;
       pr.authorEmail = person.email;
