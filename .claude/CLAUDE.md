@@ -32,7 +32,8 @@ A Node CLI that measures PR pace from local git history – a one-line PR pace t
 ### Full verify (at completion)
 
 1. Preflight
-2. If report code changed: build throwaway fixture repos as the tests do and generate a report from them into a scratch folder outside the repo. Serve it with `python3 -m http.server --bind 127.0.0.1 <port>` and open it over `http://127.0.0.1` (Playwright blocks `file://`). Switch through each period, metric and split, click a bar and confirm the listed PRs reproduce the bar's value (sum, rate or median), check the controls and tiles are readable and tappable with no horizontal scroll at phone width (about 375px), and confirm `browser_network_requests` shows no request beyond the page itself
+2. `npx -y -p node@22.0.0 -- node --test` – the suite on the Node floor release
+3. If report code changed: build throwaway fixture repos as the tests do and generate a report from them into a scratch folder outside the repo. Serve it with `python3 -m http.server --bind 127.0.0.1 <port>` and open it over `http://127.0.0.1` (Playwright blocks `file://`). Switch through each period, metric and split, click a bar and confirm the listed PRs reproduce the bar's value (sum, rate or median), check the controls and tiles are readable and tappable with no horizontal scroll at phone width (about 375px), and confirm `browser_network_requests` shows no request beyond the page itself
 
 ## Pattern index
 
