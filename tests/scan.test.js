@@ -1117,7 +1117,7 @@ describe("agent PRs", () => {
     );
   });
 
-  test("an id-less no-reply address isn't an agent, a coding agent or an AI tool", () => {
+  test("Devin's and Copilot's id-less no-reply addresses aren't agents, coding agents or AI tools", () => {
     const devinIdLess = {
       name: DEVIN.name,
       email: "devin-ai-integration[bot]@users.noreply.github.com",

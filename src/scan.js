@@ -112,7 +112,7 @@ const AI_TOOL_NOREPLY_LOCAL_PART = /^no-?reply@/;
 const AI_TOOL_EMAILS = new Set([
   // Codex
   "codex@openai.com",
-  // Codex, by the GitHub account codex's no-reply address
+  // Codex, by its GitHub account's no-reply address
   "267193182+codex@users.noreply.github.com",
   // Codex, by a hand-written form of that address with no id
   "codex@users.noreply.github.com",
