@@ -683,6 +683,26 @@ describe("agent PRs", () => {
     name: "dependabot[bot]",
     email: "49699333+dependabot[bot]@users.noreply.github.com",
   };
+  // Public AI tool identities, as their own Co-authored-by: trailers name them.
+  const CLAUDE = { name: "Claude", email: "noreply@anthropic.com" };
+  const COPILOT_AUTOFIX = {
+    name: "Copilot Autofix powered by AI",
+    email: "175728472+Copilot@users.noreply.github.com",
+  };
+  const COPILOT_APP = {
+    name: "Copilot App",
+    email: "223556219+Copilot@users.noreply.github.com",
+  };
+  const CODEX = { name: "Codex", email: "noreply@openai.com" };
+  const CODEX_ALT = { name: "Codex", email: "codex@openai.com" };
+  const AMP = { name: "Amp", email: "amp@ampcode.com" };
+  const GITHUB_COPILOT = {
+    name: "GitHub Copilot",
+    email: "copilot@github.com",
+  };
+  const JULES = { name: "Google Jules", email: "jules@google.com" };
+  // An invented tool, for the no-reply@ form.
+  const NO_REPLY_TOOL = { name: "Some AI tool", email: "no-reply@example.com" };
   const files = () => ({ [`f${++counter}.js`]: "x\n" });
 
   /** @param {...import('./fixtures.js').Identity} people */
@@ -859,6 +879,120 @@ describe("agent PRs", () => {
       email: DEV.email,
       agent: CURSOR.email,
     });
+  });
+
+  test("an AI tool's trailer from a branch commit doesn't take the credit from the person after it", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    repo.squash(1, "Add export", {
+      author: DEVIN,
+      files: files(),
+      body: `* Add export\n\n${trailers(CLAUDE)}\n\n${trailers(DEV)}`,
+    });
+    repo.squash(2, "Add import", {
+      author: COPILOT,
+      files: files(),
+      body: `* Initial plan\n\n* Potential fix for pull request finding\n\n${trailers(COPILOT_AUTOFIX)}\n\n${trailers(COPILOT_COMMITS, DEV)}`,
+    });
+    assert.deepEqual(scanRepo(repo).prs.map(credit), [
+      { name: DEV.name, email: DEV.email, agent: DEVIN.email },
+      { name: DEV.name, email: DEV.email, agent: COPILOT.email },
+    ]);
+  });
+
+  test("each AI tool pattern and listed address is skipped", () => {
+    const tools = [
+      COPILOT_APP,
+      CODEX,
+      NO_REPLY_TOOL,
+      CODEX_ALT,
+      AMP,
+      GITHUB_COPILOT,
+      JULES,
+    ];
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    tools.forEach((tool, i) =>
+      repo.squash(i + 1, `Work ${i + 1}`, {
+        author: CURSOR,
+        files: files(),
+        body: trailers(tool, OTHER),
+      }),
+    );
+    assert.deepEqual(
+      scanRepo(repo, { allAuthors: true }).prs.map(credit),
+      tools.map(() => ({
+        name: OTHER.name,
+        email: OTHER.email,
+        agent: CURSOR.email,
+      })),
+    );
+  });
+
+  test("a person whose address has noreply later in its local part isn't an AI tool", () => {
+    const person = { name: "Dev One", email: "dev.noreply@example.com" };
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    repo.squash(1, "Agent work", {
+      author: CURSOR,
+      files: files(),
+      body: trailers(person),
+    });
+    assert.deepEqual(credit(pr(scanRepo(repo, { allAuthors: true }), 1)), {
+      name: person.name,
+      email: person.email,
+      agent: CURSOR.email,
+    });
+  });
+
+  test("an agent PR naming only agents and AI tools keeps the agent, with agent_email set", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    repo.squash(1, "Tidy", {
+      author: DEVIN,
+      files: files(),
+      body: trailers(CLAUDE, COPILOT_COMMITS, COPILOT_AUTOFIX),
+    });
+    assert.deepEqual(credit(pr(scanRepo(repo, { allAuthors: true }), 1)), {
+      name: DEVIN.name,
+      email: DEVIN.email,
+      agent: DEVIN.email,
+    });
+  });
+
+  test("an AI tool identity mapped to a person in .mailmap counts as that person", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit", {
+      files: { ".mailmap": `${DEV.name} <${DEV.email}> <${CLAUDE.email}>\n` },
+    });
+    repo.squash(1, "Agent work", {
+      author: DEVIN,
+      files: files(),
+      body: trailers(CLAUDE, OTHER),
+    });
+    assert.deepEqual(credit(pr(scanRepo(repo, { allAuthors: true }), 1)), {
+      name: DEV.name,
+      email: DEV.email,
+      agent: DEVIN.email,
+    });
+  });
+
+  test("a person's PR naming an AI tool keeps its author, and an AI tool that authors a PR counts as a person", () => {
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    repo.squash(1, "Pair with Claude", {
+      files: files(),
+      body: trailers(CLAUDE),
+    });
+    repo.squash(2, "Claude's own PR", {
+      author: CLAUDE,
+      files: files(),
+      body: trailers(OTHER),
+    });
+    assert.deepEqual(scanRepo(repo, { allAuthors: true }).prs.map(credit), [
+      { name: DEV.name, email: DEV.email, agent: null },
+      { name: CLAUDE.name, email: CLAUDE.email, agent: null },
+    ]);
   });
 
   test("the default author filter and PR pace count an agent PR naming the repo's user.email", () => {
