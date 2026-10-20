@@ -104,6 +104,11 @@ const AGENT_EMAILS = new Set([
   // Codex's GitHub account `codex`: branch commit author on PRs it's asked to
   // edit
   "267193182+codex@users.noreply.github.com",
+  // Gemini's GitHub account `gemini-code-assist`: branch commit author and
+  // trailer on commits Gemini tools make, by its no-reply address and by the
+  // id-less form
+  "200291788+gemini-code-assist@users.noreply.github.com",
+  "gemini-code-assist@users.noreply.github.com",
   // Cursor's cloud agents: branch commit author
   "cursoragent@cursor.com",
   // Cursor's cloud agents: branch commit author, a rarer variant
