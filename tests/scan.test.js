@@ -1077,6 +1077,44 @@ describe("agent PRs", () => {
     );
   });
 
+  test("an id-less no-reply address isn't an agent, a coding agent or an AI tool", () => {
+    const devinIdLess = {
+      name: DEVIN.name,
+      email: "devin-ai-integration[bot]@users.noreply.github.com",
+    };
+    const copilotIdLess = {
+      name: COPILOT.name,
+      email: "copilot@users.noreply.github.com",
+    };
+    const repo = newRepo();
+    repo.commit("Initial commit");
+    repo.squash(1, "Bot work", {
+      author: devinIdLess,
+      files: files(),
+      body: trailers(OTHER),
+    });
+    repo.squash(2, "Agent work", {
+      author: CURSOR,
+      files: files(),
+      body: trailers(copilotIdLess, OTHER),
+    });
+    assert.deepEqual(scanRepo(repo, { allAuthors: true }).prs.map(credit), [
+      { name: devinIdLess.name, email: devinIdLess.email, agent: null },
+      {
+        name: copilotIdLess.name,
+        email: copilotIdLess.email,
+        agent: CURSOR.email,
+      },
+    ]);
+
+    const unmatched = newRepo({ email: "nobody@example.com" });
+    unmatched.commit("Initial commit");
+    unmatched.squash(1, "Bot work", { author: devinIdLess, files: files() });
+    assert.deepEqual(scanRepo(unmatched).repos[0].warnings, [
+      `no PRs match the author filter. Most frequent PR authors: ${label(devinIdLess)} (1) – pass --author to choose, once for each of your identities`,
+    ]);
+  });
+
   describe("the repo owner's no-reply address", () => {
     // Invented GitHub identities, in the forms Copilot's trailer and GitHub's
     // squash commit name a person by.

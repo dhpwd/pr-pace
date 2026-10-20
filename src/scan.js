@@ -94,7 +94,6 @@ const REVERT_QUOTE = /^Revert "(.*)"/s;
 // Agent identities, matched on the lowercased email after .mailmap. A PR whose
 // git author is one counts for the first person its Co-authored-by: trailers
 // name – see "Detecting PRs" in docs/specs/v1.md.
-const GITHUB_APP_BOT = /^\d+\+[^@]*\[bot\]@users\.noreply\.github\.com$/;
 const AGENT_EMAILS = new Set([
   // GitHub Copilot coding agent: squash author and branch commit author
   "198982749+copilot@users.noreply.github.com",
@@ -107,7 +106,6 @@ const AGENT_EMAILS = new Set([
 // trailer names no person, so crediting an agent PR skips it, and nothing else
 // reads these – see "Detecting PRs" in docs/specs/v1.md.
 const AI_TOOL_NOREPLY_LOCAL_PART = /^no-?reply@/;
-const AI_TOOL_COPILOT = /^\d+\+copilot@users\.noreply\.github\.com$/;
 const AI_TOOL_EMAILS = new Set([
   // Codex
   "codex@openai.com",
@@ -130,11 +128,8 @@ const CODING_AGENTS = new Set([
   "cursor[bot]",
   "google-labs-jules[bot]",
 ]);
-const NOREPLY_LOGIN = /^\d+\+([^@]*)@users\.noreply\.github\.com$/;
-// Any GitHub no-reply address, the older id-less `<login>@` form included, and
-// the forms of origin's URL the owner is read from – see "Detecting PRs" in
+// The forms of origin's URL the owner is read from – see "Detecting PRs" in
 // docs/specs/v1.md.
-const NOREPLY_EMAIL = /^(?:\d+\+)?([^@]+)@users\.noreply\.github\.com$/;
 const GITHUB_REMOTE =
   /^(?:https:\/\/(?:[^/@]+@)?github\.com\/|git@github\.com:|ssh:\/\/git@github\.com(?::\d+)?\/)([^/]+)\/[^/]+\/?$/i;
 const CO_AUTHOR = /^co-authored-by:\s*(\S.*?)\s*<([^<>]*)>$/i;
@@ -515,18 +510,36 @@ function applyBranchAuthors(repoPath, merges, warnings) {
   return messages;
 }
 
+/**
+ * The id and login of a GitHub no-reply address, `<id>+<login>@` or the older
+ * id-less `<login>@` form – see "Detecting PRs" in docs/specs/v1.md. Rules over
+ * GitHub no-reply addresses test these parts rather than matching the address
+ * again, each requiring the id or not.
+ * @param {string} lower a lowercased email
+ * @returns {{ id: string | undefined, login: string } | undefined}
+ */
+function noReplyParts(lower) {
+  const match = /^(?:(\d+)\+)?([^@]+)@users\.noreply\.github\.com$/.exec(lower);
+  return match ? { id: match[1], login: match[2] } : undefined;
+}
+
 /** @param {string} email after .mailmap */
 function isAgent(email) {
   const lower = email.toLowerCase();
-  return GITHUB_APP_BOT.test(lower) || AGENT_EMAILS.has(lower);
+  const parts = noReplyParts(lower);
+  return (
+    (parts?.id !== undefined && parts.login.endsWith("[bot]")) ||
+    AGENT_EMAILS.has(lower)
+  );
 }
 
 /** @param {string} email after .mailmap */
 function isAiTool(email) {
   const lower = email.toLowerCase();
+  const parts = noReplyParts(lower);
   return (
     AI_TOOL_NOREPLY_LOCAL_PART.test(lower) ||
-    AI_TOOL_COPILOT.test(lower) ||
+    (parts?.id !== undefined && parts.login === "copilot") ||
     AI_TOOL_EMAILS.has(lower)
   );
 }
@@ -534,10 +547,10 @@ function isAiTool(email) {
 /** @param {string} email after .mailmap */
 function isCodingAgent(email) {
   const lower = email.toLowerCase();
-  const login = NOREPLY_LOGIN.exec(lower)?.[1];
+  const parts = noReplyParts(lower);
   return (
     CODING_AGENTS.has(lower) ||
-    (login !== undefined && CODING_AGENTS.has(login))
+    (parts?.id !== undefined && CODING_AGENTS.has(parts.login))
   );
 }
 
@@ -650,7 +663,7 @@ function noMatchWarning(prs) {
  */
 function ownerNoReplyWarnings(repoPath, prs, matches) {
   /** @param {Pr} pr */
-  const login = (pr) => NOREPLY_EMAIL.exec(pr.authorEmail.toLowerCase())?.[1];
+  const login = (pr) => noReplyParts(pr.authorEmail.toLowerCase())?.login;
   const missed = prs.filter(
     (pr) =>
       login(pr) !== undefined &&
