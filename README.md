@@ -39,13 +39,15 @@ Everything is read from local history, so no token or API access is needed.
 
 ## Install
 
-Needs Node 22 or later and git. With git older than 2.40 the `.gitattributes` exclusions are skipped, with a warning. From a checkout of this repo:
+Needs Node 22 or later and git. With git older than 2.40 the `.gitattributes` exclusions are skipped, with a warning.
 
 ```sh
-npm install --global .
+npm install --global pr-pace
 ```
 
-That puts `pr-pace` on your PATH. To run it without installing, use `npx .` from the checkout in place of `pr-pace` below.
+That puts `pr-pace` on your PATH. To run it without installing, use `npx pr-pace` in place of `pr-pace` below.
+
+To run a working copy, install it from a checkout of this repo with `npm install --global .`, or use `npx .` from the checkout in place of `pr-pace`.
 
 ## Commands
 
@@ -93,4 +95,8 @@ An agent PR that names no one stays with the agent. When that agent is among the
 
 ## How the numbers are defined
 
-[`docs/specs/v1.md`](docs/specs/v1.md) sets out what PR pace counts and its limits, what counts as a PR, which lines count, how reverts are detected and linked, the JSON schema and the report's behaviour.
+[`docs/specs/v1.md`](https://github.com/dhpwd/pr-pace/blob/main/docs/specs/v1.md) sets out what PR pace counts and its limits, what counts as a PR, which lines count, how reverts are detected and linked, the JSON schema and the report's behaviour.
+
+## Licence
+
+MIT – see `LICENSE`.
