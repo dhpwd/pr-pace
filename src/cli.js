@@ -43,7 +43,8 @@ const SCAN_OPTION_HELP = {
   author: `  --author <email|name>   Count only this author: exact match, ignoring case,
                           after .mailmap. "Name <email>" matches by email.
                           Repeatable. Default: each repo's git config
-                          user.email`,
+                          user.email. Any --author replaces that default,
+                          so pass it once for each of your identities`,
   "all-authors": `  --all-authors           Count every author (for team breakdowns)`,
   since: `  --since <date>          Only PRs merged on or after this date`,
   until: `  --until <date>          Only PRs merged on or before this date. A bare date

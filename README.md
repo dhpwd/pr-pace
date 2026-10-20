@@ -68,7 +68,7 @@ Scans each path and writes the result as JSON to stdout.
 pr-pace scan ~/code --since 2026-01-01 --out scan.json
 ```
 
-By default it counts the PRs authored by each repo's `git config user.email`. Pass `--author <email|name>` (repeatable) for someone else, or `--all-authors` for a team view. Other options limit the date range, set the folder search depth, override the default branch, fetch first and adjust which files count towards lines changed – `pr-pace scan --help` lists them all.
+By default it counts the PRs authored by each repo's `git config user.email`. Pass `--author <email|name>` for someone else, or `--all-authors` for a team view. Any `--author` replaces that default in every repo, so to count your own PRs under several identities, pass `--author` once for each of them. Other options limit the date range, set the folder search depth, override the default branch, fetch first and adjust which files count towards lines changed – `pr-pace scan --help` lists them all.
 
 ### `pr-pace report [path...]`
 
@@ -83,7 +83,7 @@ pr-pace report --from scan.json --out report.html
 
 ## PRs opened by coding agents
 
-A PR that a coding agent such as Copilot's coding agent, Devin or Cursor's cloud agents opened under its own identity counts for the person the agent names in a `Co-authored-by:` trailer, not for the agent. Copilot and Cursor name you by your GitHub no-reply address (`<id>+<login>@users.noreply.github.com`), which may not be your git email, so by default those PRs don't count as yours. Nothing warns you unless none of a repo's PRs match you, in which case the repo's warning lists the PR authors it found. Pass the no-reply address as an extra `--author` alongside your own email, or map it to your usual identity in the repo's `.mailmap`:
+A PR that a coding agent such as Copilot's coding agent, Devin or Cursor's cloud agents opened under its own identity counts for the person the agent names in a `Co-authored-by:` trailer, not for the agent. Copilot and Cursor name you by your GitHub no-reply address (`<id>+<login>@users.noreply.github.com`), which may not be your git email, so by default those PRs don't count as yours. In a repo under your own GitHub account, the repo's warning names your no-reply address when PRs credit it and your filter misses it – agent PRs, or your own squash PRs merged with email privacy on. Elsewhere nothing warns you unless none of a repo's PRs match you, in which case the warning lists the PR authors it found. Pass the no-reply address as an extra `--author` alongside your own email, or map it to your usual identity in the repo's `.mailmap`:
 
 ```
 Your Name <you@example.com> <12345678+your-login@users.noreply.github.com>
