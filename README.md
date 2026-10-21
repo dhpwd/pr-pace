@@ -33,7 +33,9 @@ The sample line above says that in the 30 days to the date shown, you merged 100
 
 PR count is the obvious measure, but PRs vary hugely in size, so ten 10-line PRs count ten times as much as one 1,000-line PR. Lines changed says the reverse, and a few large PRs dominate it. PR pace sits between the two. Each PR counts √(lines ÷ 100), so a 100-line PR counts 1, a 400-line PR counts 2 and ten 10-line PRs count the same as one 1,000-line PR.
 
-It measures delivered change (code that landed and stayed) rather than the effort behind it. A PR that was later reverted delivered nothing that stayed, so it counts zero. Its strongest use is comparing yourself with your own history, to see whether a change in how you work shows up in what you land. When you post it, post the whole line, so the window, PR count, median PR size and version go with the figure.
+Any weighting by size can be gamed in two ways: by splitting a change into more PRs or by padding PRs with lines. PR count rewards splitting in full and lines changed rewards padding in full, but under √ each raises the figure only by the square root of the factor: the same 1,000 lines landed as 4 PRs count 2× what they do as 1 PR, and a PR padded to twice its lines counts about 1.4×. The square root also fits the only public data on how work grows with PR size ([Graphite's time-to-merge figures](https://graphite.com/blog/the-ideal-pr-is-50-lines-long)), which put review time at lines to a power of roughly 0.26–0.66, and √ is a power of 0.5. A log weighting would track human effort instead, which shrinks as agents write more of the code.
+
+PR pace measures delivered change (code that landed and stayed) rather than the effort behind it. A PR that was later reverted delivered nothing that stayed, so it counts zero. Its strongest use is comparing yourself with your own history, to see whether a change in how you work shows up in what you land. When you post it, post the whole line, so the window, PR count, median PR size and version go with the figure.
 
 ## How it works
 
