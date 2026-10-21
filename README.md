@@ -1,45 +1,70 @@
 # pr-pace
 
-PR pace is the size-weighted PRs you merged per week over the last 30 days, where each PR counts √(lines ÷ 100): a 100-line PR counts 1 and a 400-line PR 2. One command prints it as a line to post:
+pr-pace uses your local git history to measure how much code you land and prints it as one line you can post.
+
+What's your PRP?
+
+## Try it
+
+Inside a repo you merge PRs into, run:
 
 ```sh
-npx pr-pace pace <path>
+npx pr-pace pace
+npx pr-pace report --open
 ```
+
+(The first time you run them, npx asks to install pr-pace. Answer y.)
+
+The first prints your PR pace:
 
 ```
 PR pace 69.1/wk · 30 days to 2026-10-19 · 100 PRs · median 500 lines · pr-pace v1
 ```
 
-Post the whole line, so the window, PR count, median PR size and version go with the figure. Read it with its limits in mind:
+The second writes a report of your PRs over time to `pr-pace.html` in the current folder and opens it. To cover several repos at once, point either command at the folder that holds them, as in `npx pr-pace pace ~/code`. You need Node 22 or later and git.
 
-- It measures delivered change – code that landed and stayed – not effort. Revert PRs and PRs since reverted count zero, so a later run can lower a figure as reverts land
-- A few large PRs carry much of it, and below about five PRs a week it's noisy
-- A stack that needs more lines for the same change scores higher, so comparing people across stacks is weak. It's strongest as you against your own history
-- Only merged PRs on the default branch of the repos you scan count. Commits pushed straight to the branch and repos left out of the scan don't show
+![A pr-pace report: summary tiles for PRs, weighted PRs, median PR size, lines changed and revert rate, above a bar chart of weighted PRs per week](https://raw.githubusercontent.com/dhpwd/pr-pace/main/docs/report.png)
 
-For the history behind it, write the report and open it:
+pr-pace never sees your code. It asks git for each commit's author, date and message and for how many lines each file gained and lost. It only runs git commands that read, such as `git log`, so it never commits or changes branches or config, and it writes nothing but the report or JSON file you ask for. The one exception is `--fetch`, which runs `git fetch` first. It makes no network requests, needs no token and sends nothing anywhere. It has no dependencies, so `npx` downloads only its own source, which you can read in this repo.
 
-```sh
-npx pr-pace report <path> --open
-```
+## Why PR pace
 
-pr-pace reads local git history: how many pull requests a person lands, how big they are and how often they get reverted, over time. Point it at one repo or a folder of repos and it prints a one-line PR pace or writes JSON or a self-contained HTML report.
+The sample line above says that in the 30 days to the date shown, you merged 100 PRs with a median size of 500 lines, and together they add up to 69.1 size-weighted PRs a week.
 
-It counts merged PRs on each repo's default branch – squash merges and merge commits, using GitHub and GitLab conventions – and reports five figures per day, week or month:
+PR count is the obvious measure, but PRs vary hugely in size, so ten 10-line PRs count ten times as much as one 1,000-line PR. Lines changed says the reverse, and a few large PRs dominate it. PR pace sits between the two. Each PR counts √(lines ÷ 100), so a 100-line PR counts 1, a 400-line PR counts 2 and ten 10-line PRs count the same as one 1,000-line PR.
+
+It measures delivered change (code that landed and stayed) rather than the effort behind it. A PR that was later reverted delivered nothing that stayed, so it counts zero. Its strongest use is comparing yourself with your own history, to see whether a change in how you work shows up in what you land. When you post it, post the whole line, so the window, PR count, median PR size and version go with the figure.
+
+## How it works
+
+pr-pace walks the first-parent history of each repo's default branch, which gives one commit per merged PR whether the repo squash-merges or uses merge commits. It recognises PRs by GitHub's and GitLab's merge conventions. Commits pushed straight to the branch don't count, and nor do PRs landed with "Rebase and merge", which leaves no PR number in history.
+
+By default it counts the PRs authored by each repo's `git config user.email`. A PR that a coding agent opened counts for the person it names as co-author (see [PRs opened by coding agents](#prs-opened-by-coding-agents)).
+
+A PR's size is its lines changed: added + removed, leaving out docs, lockfiles, build output and files `.gitattributes` marks as generated. Tests and config count, and a docs-only PR counts as a PR with zero lines.
+
+PR pace sums √(lines ÷ 100) over the PRs merged in the 30 days to today (today included, in this machine's timezone) and turns the total into a weekly rate (× 7 ÷ 30). Revert PRs and PRs since reverted count zero, so a later run can lower a figure as reverts land. The line's PR count and median cover the same PRs as the figure.
+
+The report and the JSON output give five figures per day, week or month:
 
 - **PRs** – merged PRs, leaving out revert PRs
-- **Size-weighted PRs** – PRs adjusted for size. Each PR counts √(lines ÷ 100), so a 100-line PR counts 1, a 400-line PR 2 and a 25-line PR 0.5
+- **Size-weighted PRs** – each PR counted as √(lines ÷ 100), summed
 - **Median PR size** – lines changed by the middle PR. It's context for reading PRs and size-weighted PRs (did PRs get bigger or smaller?), not a target
-- **Lines changed** – added + removed, leaving out docs, lockfiles, build output and files `.gitattributes` marks as generated
+- **Lines changed** – added + removed, with the same files left out as above
 - **Revert rate** – the share of PRs later reverted
 
-Size-weighted PRs rest on a convention, not a measured law: the 100-line reference is fixed rather than taken from your data, so figures compare between people and over time. They work best for tracking one team over time. Comparing teams across languages or stacks misleads, because a line carries a different amount of work in each and the default exclusions shape the number.
+The size weighting rests on a convention, not a measured law: the 100-line reference is fixed rather than taken from your data, so figures compare between people and over time. Read the figures with their limits in mind:
 
-Everything is read from local history, so no token or API access is needed.
+- A few large PRs carry much of the figure, and below about five PRs a week it's noisy
+- A stack that needs more lines for the same change scores higher, and the default exclusions affect each stack differently, so comparing people or teams across stacks is weak
+- Only the repos you scan count, and the line doesn't say how many there were
+- Recent periods understate the revert rate, because their PRs have had less time to be reverted
+
+[`docs/specs/v1.md`](https://github.com/dhpwd/pr-pace/blob/main/docs/specs/v1.md) sets out every rule: what counts as a PR, which lines count, how reverts are detected and linked, the JSON schema and the report's behaviour.
 
 ## Install
 
-Needs Node 22 or later and git. With git older than 2.40 the `.gitattributes` exclusions are skipped, with a warning.
+pr-pace needs Node 22 or later and git. With git older than 2.40 the `.gitattributes` exclusions are skipped, with a warning.
 
 ```sh
 npm install --global pr-pace
@@ -51,51 +76,55 @@ To run a working copy, install it from a checkout of this repo with `npm install
 
 ## Commands
 
+Every command takes one or more paths to scan and defaults to the current folder. A path is a repo, or a folder whose subfolders are repos. `pr-pace <command> --help` lists a command's options.
+
 ### `pr-pace pace [path...]`
 
-Scans each path – a repo, or a folder whose subfolders are repos – and prints your PR pace line to stdout. The line covers the 30 days to today, today included, in this machine's timezone, and sums across every repo scanned.
+It prints one PR pace line to stdout, covering every repo it scanned.
 
 ```sh
 pr-pace pace ~/code
+pr-pace pace ~/code --author you@example.com --author you@work.example.com
 pr-pace pace --from scan.json
 ```
 
-It takes `--author` (repeatable, for one person's several identities), `--exclude`, `--depth`, `--branch` and `--fetch` as `scan` does. It refuses `--since`, `--until`, `--all-authors` and `--include-docs`, so every line covers one person's last 30 days and counts lines the same way. `--exclude` stays for generated code the default rules miss, and can only lower the figure. `--from <scan.json>` prints the line from a saved scan, counting back from the day the scan ran. `pr-pace pace --help` lists the options.
+Pass `--author` once for each address you commit under, since any `--author` replaces the default. `pace` also takes `--depth`, `--branch` and `--fetch`, as `scan` does. It refuses `--since`, `--until`, `--all-authors` and `--include-docs`, so every line covers one person's last 30 days and counts lines the same way. It still accepts `--exclude` for generated code the default rules miss, and excluding files can only lower the figure. `--from <scan.json>` prints the line from a saved scan, counting back from the day the scan ran.
 
 ### `pr-pace scan [path...]`
 
-Scans each path and writes the result as JSON to stdout.
+It writes the scan result as JSON to stdout.
 
 ```sh
 pr-pace scan ~/code --since 2026-01-01 --out scan.json
 ```
 
-By default it counts the PRs authored by each repo's `git config user.email`. Pass `--author <email|name>` for someone else, or `--all-authors` for a team view. Any `--author` replaces that default in every repo, so to count your own PRs under several identities, pass `--author` once for each of them. Other options limit the date range, set the folder search depth, override the default branch, fetch first and adjust which files count towards lines changed – `pr-pace scan --help` lists them all.
+Pass `--author <email|name>` for someone else, or `--all-authors` for a team view. Other options limit the date range, set the folder search depth, override the default branch, fetch first and adjust which files count towards lines changed.
 
 ### `pr-pace report [path...]`
 
-Scans with the same options and writes `pr-pace.html`: a single file with charts by day, week or month, splits by repo or author, and the list of PRs behind each bar. It makes no network requests, so it works offline and as an attachment.
+It scans with the same options as `scan` and writes `pr-pace.html`: a single file with charts by day, week or month, splits by repo or author, and the list of PRs behind each bar. It makes no network requests, so it works offline and as an attachment.
 
 ```sh
 pr-pace report ~/code --open
+pr-pace report ~/code --all-authors --open
 pr-pace report --from scan.json --out report.html
 ```
 
-`pr-pace report --help` lists the options.
+The split by author needs `--all-authors`, which counts every author's PRs for a team view.
+
+The report contains your repo names, PR titles and authors' names and emails, so check it before you share it. The PR pace line contains none of these.
 
 ## PRs opened by coding agents
 
-A PR that a coding agent such as Copilot's coding agent, Codex's coding agent, Devin or Cursor's cloud agents opened under its own identity counts for the person the agent names in a `Co-authored-by:` trailer, not for the agent. Copilot, Codex and Cursor name you by your GitHub no-reply address (`<id>+<login>@users.noreply.github.com`), which may not be your git email, so by default those PRs don't count as yours. In a repo under your own GitHub account, the repo's warning names your no-reply address when PRs credit it and your filter misses it – agent PRs, or your own squash PRs merged with email privacy on. Elsewhere nothing warns you unless none of a repo's PRs match you, in which case the warning lists the PR authors it found. Pass the no-reply address as an extra `--author` alongside your own email, or map it to your usual identity in the repo's `.mailmap`:
+When a coding agent opens a PR under its own identity (Copilot's coding agent, Codex's coding agent, Devin or Cursor's cloud agents), the PR counts for the person the agent names in a `Co-authored-by:` trailer, not for the agent. Copilot, Codex and Cursor name you by your GitHub no-reply address (`<id>+<login>@users.noreply.github.com`), which may not be your git email, so by default those PRs don't count as yours.
+
+In a repo under your own GitHub account, pr-pace warns when PRs credit your no-reply address but your filter misses it, and the warning names the address. This catches agent PRs and your own squash PRs merged with GitHub's email privacy on. Elsewhere nothing warns you unless none of a repo's PRs match you, in which case the warning lists the PR authors it found. Pass the no-reply address as an extra `--author` alongside your own email, or map it to your usual identity in the repo's `.mailmap`:
 
 ```
 Your Name <you@example.com> <12345678+your-login@users.noreply.github.com>
 ```
 
 An agent PR that names no one stays with the agent. When that agent is among the authors the no-match warning lists, the warning says how to claim its PRs.
-
-## How the numbers are defined
-
-[`docs/specs/v1.md`](https://github.com/dhpwd/pr-pace/blob/main/docs/specs/v1.md) sets out what PR pace counts and its limits, what counts as a PR, which lines count, how reverts are detected and linked, the JSON schema and the report's behaviour.
 
 ## Licence
 
