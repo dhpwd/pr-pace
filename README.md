@@ -114,7 +114,7 @@ pr-pace report --from scan.json --out report.html
 
 The split by author needs `--all-authors`, which counts every author's PRs for a team view.
 
-Each author shows under the name on their latest PR, preferring their name to their GitHub login when their PRs carry both. To choose the name shown, or to settle on one name for an email that carries two, map them in the scanned repo's `.mailmap`, as in the example under [PRs opened by coding agents](#prs-opened-by-coding-agents).
+Each author shows under the name on their latest PR. When PRs credit their GitHub no-reply address under both their name and their GitHub login, their name is shown. To choose the name shown, or to settle on one name for an email that carries two, map it in the `.mailmap` of each scanned repo that uses another name, as in the example under [PRs opened by coding agents](#prs-opened-by-coding-agents).
 
 The report contains your repo names, PR titles and authors' names and emails, so check it before you share it. The PR pace line contains none of these.
 

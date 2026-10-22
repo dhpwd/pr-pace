@@ -1424,6 +1424,27 @@ describe("agent PRs", () => {
       ]);
     });
 
+    test("it names the owner from all PRs in range, including those an --author name matches", () => {
+      const repo = newRepo();
+      repo.commit("Initial commit");
+      repo.git("remote", "add", "origin", ORIGIN);
+      repo.squash(1, "Merged with email privacy on", {
+        author: { name: "Dev One", email: OWNER.email },
+        files: files(),
+      });
+      repo.squash(2, "Agent work", {
+        author: COPILOT,
+        files: files(),
+        body: trailers(OWNER),
+      });
+      assert.deepEqual(
+        scanRepo(repo, { authors: ["Dev One"] }).repos[0].warnings,
+        [
+          `1 PR credits ${label({ name: "Dev One", email: OWNER.email })}${reason}`,
+        ],
+      );
+    });
+
     test("each origin URL form, the owner in any case and the id-less address all warn", () => {
       const repo = ownedRepo(ORIGIN);
       for (const url of [

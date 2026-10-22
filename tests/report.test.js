@@ -412,6 +412,7 @@ describe("report figures", () => {
     assert.equal(latest(noReply, ["dev-one", "Dev One"]), "Dev One");
     assert.equal(latest(noReply, ["Dev One", "DEV-ONE"]), "Dev One");
     assert.equal(latest(noReply, ["dev-one", "DEV-ONE"]), "DEV-ONE");
+    assert.equal(latest(noReply, ["DEV-ONE", "dev-one"]), "dev-one");
     assert.equal(
       latest("dev-one@users.noreply.github.com", ["Dev One", "dev-one"]),
       "Dev One",

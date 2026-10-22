@@ -257,10 +257,11 @@ export function assignSeries(rows, keyOf, labelOf) {
  * name shows under the one they use now. A name equal, ignoring case, to the
  * login of the author's GitHub no-reply address is skipped when they have
  * another, as an agent's trailer or a merge PR's branch tip can name them by
- * login. The CLI's warnings name authors with it too (`authorCounts` in
- * src/scan.js). A later row for a key replaces an earlier one's name, so this
- * relies on the rows running oldest first, as the scan's PRs do – see "JSON
- * output" in docs/specs/v1.md.
+ * login. The login pattern repeats `noReplyParts` in src/scan.js, which inlined
+ * code can't import. The CLI's warnings name authors with this too
+ * (`authorCounts` in src/scan.js). A later row for a key replaces an earlier
+ * one's name, so this relies on the rows running oldest first, as the scan's
+ * PRs do – see "JSON output" in docs/specs/v1.md.
  * @param {Pick<Row, "authorKey" | "author_name">[]} rows
  * @returns {Map<string, string>}
  */
