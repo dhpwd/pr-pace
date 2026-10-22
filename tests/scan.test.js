@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, describe, test } from "node:test";
 import { paceOf } from "../src/pace.js";
@@ -9,6 +9,7 @@ import {
   DEV,
   MERGER,
   OTHER,
+  PKG,
   Repo,
   removeDir,
   scanOptions,
@@ -1535,10 +1536,7 @@ describe("JSON output", () => {
       "repos",
       "prs",
     ]);
-    const pkg = JSON.parse(
-      readFileSync(new URL("../package.json", import.meta.url), "utf8"),
-    );
-    assert.equal(result.version, pkg.version);
+    assert.equal(result.version, PKG.version);
     assert.equal(result.generated_at, "2026-10-17T21:00:00+01:00");
     assert.deepEqual(Object.keys(result.options), [
       "authors",

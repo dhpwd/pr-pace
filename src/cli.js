@@ -393,15 +393,15 @@ function runPace(values, positionals) {
     const file = values.from;
     result = readFromScan(file, values, positionals, "prints the PR pace");
     // Checked first, as another major's options may not mean what the checks
-    // below expect. A scan without a version predates the field.
-    const { version, options } = result;
-    if (version !== undefined) {
-      if (typeof version !== "string") throw notAScan(file);
-      if (majorOf(version) !== majorOf(VERSION)) {
-        throw new Error(
-          `${file} was scanned with pr-pace ${version}, and this is pr-pace ${VERSION} – a PR pace line must come from one major version's rules, so run pr-pace pace afresh, or print it with that version: npx pr-pace@${majorOf(version)} pace --from ${file}`,
-        );
-      }
+    // below expect. A scan without a version predates the field, so it reads
+    // as this major.
+    const { version = VERSION, options } = result;
+    if (typeof version !== "string") throw notAScan(file);
+    const major = majorOf(version);
+    if (major !== majorOf(VERSION)) {
+      throw new Error(
+        `${file} was scanned with pr-pace ${version}, and this is pr-pace ${VERSION} – a PR pace line must come from one major version's rules, so run pr-pace pace afresh, or print it with that version: npx pr-pace@${major} pace --from ${file}`,
+      );
     }
     if (options.since !== null || options.until !== null) {
       throw new Error(
