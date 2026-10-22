@@ -52,6 +52,23 @@ export function majorOf(version) {
 }
 
 /**
+ * Why `pace --from` refuses a saved scan written by another major, or null
+ * when the scan's major is the running one. A scan without a version came
+ * from 1.0.x, the only releases that wrote none, so it reads as major 1
+ * whichever version runs it.
+ * @param {string} file
+ * @param {string | undefined} scanVersion
+ * @param {string} version the running package version
+ * @returns {string | null}
+ */
+export function versionRefusal(file, scanVersion, version) {
+  const major = scanVersion === undefined ? "1" : majorOf(scanVersion);
+  if (major === majorOf(version)) return null;
+  const scanned = scanVersion ?? "1.0.x, before scans recorded their version";
+  return `${file} was scanned with pr-pace ${scanned}, and this is pr-pace ${version} – a PR pace line must come from one major version's rules, so run pr-pace pace afresh, or print it with that version: npx pr-pace@${major} pace --from ${file}`;
+}
+
+/**
  * The one line to post: PR pace 69.1/wk · 30 days to 2026-10-19 · 100 PRs ·
  * median 500 lines · pr-pace v1.
  * @param {import('./scan.js').ScanResult} scan

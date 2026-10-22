@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { majorOf, paceLine } from "./pace.js";
+import { paceLine, versionRefusal } from "./pace.js";
 import { renderReport } from "./report.js";
 import { scan, VERSION } from "./scan.js";
 import { addDays, isDay, startOfDay, zoneFormatter } from "./time.js";
@@ -397,18 +397,16 @@ function runPace(values, positionals) {
     const file = values.from;
     result = readFromScan(file, values, positionals, "prints the PR pace");
     // Checked first, as another major's options may not mean what the checks
-    // below expect. A scan without a version predates the field – see "JSON
-    // output" in docs/specs/v1.md.
-    const { version = VERSION, options } = result;
-    if (typeof version !== "string" || !PACKAGE_VERSION.test(version)) {
+    // below expect.
+    const { version, options } = result;
+    if (
+      version !== undefined &&
+      (typeof version !== "string" || !PACKAGE_VERSION.test(version))
+    ) {
       throw notAScan(file);
     }
-    const major = majorOf(version);
-    if (major !== majorOf(VERSION)) {
-      throw new Error(
-        `${file} was scanned with pr-pace ${version}, and this is pr-pace ${VERSION} – a PR pace line must come from one major version's rules, so run pr-pace pace afresh, or print it with that version: npx pr-pace@${major} pace --from ${file}`,
-      );
-    }
+    const refusal = versionRefusal(file, version, VERSION);
+    if (refusal !== null) throw new Error(refusal);
     if (options.since !== null || options.until !== null) {
       throw new Error(
         `${file} was scanned with --since or --until, and PR pace always covers the 30 days to the day the scan ran – pass a scan run without them, or drop --from to scan afresh`,
