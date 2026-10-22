@@ -166,7 +166,16 @@ describe("default exclusions", () => {
   });
 
   test("count a file named after a build folder, at the root and nested", () => {
-    for (const path of ["build", "dist", "scripts/build", "lib/dist"]) {
+    for (const path of [
+      "build",
+      "dist",
+      "vendor",
+      "node_modules",
+      "scripts/build",
+      "lib/dist",
+      "bin/vendor",
+      "a/node_modules",
+    ]) {
       assert.equal(excluded(path), false, path);
     }
   });

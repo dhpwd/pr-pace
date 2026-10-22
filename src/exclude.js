@@ -91,7 +91,10 @@ const LOCKFILES = new Set([
 
 const BUILD_SUFFIXES = [".min.js", ".min.css", ".map"];
 
-/** Folders-only globs, so a file named `build` or `dist` still counts. */
+/**
+ * Folders-only globs with no inner slash, so each matches its folder at any
+ * depth but not a file of the same name.
+ */
 const BUILD_DIRS = ["dist/", "build/", "vendor/", "node_modules/"];
 
 /** The .gitattributes attributes that exclude a file from lines changed. */
