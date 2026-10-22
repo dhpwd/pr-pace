@@ -43,6 +43,15 @@ export function paceOf(scan) {
 }
 
 /**
+ * "1" for "1.4.2" – the major version a PR pace line carries, and the one
+ * `pace --from` requires a saved scan to share.
+ * @param {string} version
+ */
+export function majorOf(version) {
+  return version.split(".")[0];
+}
+
+/**
  * The one line to post: PR pace 69.1/wk · 30 days to 2026-10-19 · 100 PRs ·
  * median 500 lines · pr-pace v1.
  * @param {import('./scan.js').ScanResult} scan
@@ -59,6 +68,6 @@ export function paceLine(scan, version) {
     lines === null
       ? "median –"
       : `median ${lines} line${lines === 1 ? "" : "s"}`,
-    `pr-pace v${version.split(".")[0]}`,
+    `pr-pace v${majorOf(version)}`,
   ].join(" · ");
 }

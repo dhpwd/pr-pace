@@ -90,7 +90,7 @@ pr-pace pace ~/code --author you@example.com --author you@work.example.com
 pr-pace pace --from scan.json
 ```
 
-Pass `--author` once for each address you commit under, since any `--author` replaces the default. `pace` also takes `--depth`, `--branch` and `--fetch`, as `scan` does. It refuses `--since`, `--until`, `--all-authors` and `--include-docs`, so every line covers one person's last 30 days and counts lines the same way. It still accepts `--exclude` for generated code the default rules miss, and excluding files can only lower the figure. `--from <scan.json>` prints the line from a saved scan, counting back from the day the scan ran.
+Pass `--author` once for each address you commit under, since any `--author` replaces the default. `pace` also takes `--depth`, `--branch` and `--fetch`, as `scan` does. It refuses `--since`, `--until`, `--all-authors` and `--include-docs`, so every line covers one person's last 30 days and counts lines the same way. It still accepts `--exclude` for generated code the default rules miss, and excluding files can only lower the figure. `--from <scan.json>` prints the line from a saved scan, counting back from the day the scan ran. It refuses a scan made by another major version of pr-pace, since that version counted the PRs and lines by its own rules.
 
 ### `pr-pace scan [path...]`
 
