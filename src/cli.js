@@ -2,16 +2,12 @@ import { spawn } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { paceLine } from "./pace.js";
+import { paceLine, versionRefusal } from "./pace.js";
 import { renderReport } from "./report.js";
-import { scan } from "./scan.js";
+import { scan, VERSION } from "./scan.js";
 import { addDays, isDay, startOfDay, zoneFormatter } from "./time.js";
 
 /** @typedef {Record<string, string | boolean | (string | boolean)[] | undefined>} ArgValues */
-
-const VERSION = JSON.parse(
-  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
-).version;
 
 const MAIN_HELP = `pr-pace – measure PR pace from local git history
 
@@ -88,7 +84,8 @@ PR count, the median PR size and the tool's major version, so post it whole.
 Options
   --from <scan.json>      Print the line from a saved scan instead of
                           scanning, counting back from the day it ran. Paths
-                          and scan options can't be combined with it
+                          and scan options can't be combined with it. A scan
+                          from another major version of pr-pace is refused
 ${PACE_OPTIONS_HELP}
   -h, --help              Show this help
 
@@ -189,6 +186,10 @@ const COMMANDS = {
 const TIMESTAMP =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/i;
 
+// A semver package version, so the npx command that pace --from suggests for
+// another major's scan can hold nothing from the file but a version.
+const PACKAGE_VERSION = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?$/;
+
 /**
  * Turns a --since or --until value into an epoch-ms bound: inclusive for
  * --since, exclusive for --until.
@@ -269,6 +270,13 @@ function printWarnings(result) {
 }
 
 /** @param {string} file */
+function notAScan(file) {
+  return new Error(
+    `${file} isn't a pr-pace scan – pass a file written by pr-pace scan`,
+  );
+}
+
+/** @param {string} file */
 function readScan(file) {
   /** @type {unknown} */
   let parsed;
@@ -288,9 +296,7 @@ function readScan(file) {
     !Array.isArray(candidate.repos) ||
     !candidate.options
   ) {
-    throw new Error(
-      `${file} isn't a pr-pace scan – pass a file written by pr-pace scan`,
-    );
+    throw notAScan(file);
   }
   return /** @type {import('./scan.js').ScanResult} */ (candidate);
 }
@@ -390,7 +396,17 @@ function runPace(values, positionals) {
   if (typeof values.from === "string") {
     const file = values.from;
     result = readFromScan(file, values, positionals, "prints the PR pace");
-    const { options } = result;
+    // Checked first, as another major's options may not mean what the checks
+    // below expect.
+    const { version, options } = result;
+    if (
+      version !== undefined &&
+      (typeof version !== "string" || !PACKAGE_VERSION.test(version))
+    ) {
+      throw notAScan(file);
+    }
+    const refusal = versionRefusal(file, version, VERSION);
+    if (refusal !== null) throw new Error(refusal);
     if (options.since !== null || options.until !== null) {
       throw new Error(
         `${file} was scanned with --since or --until, and PR pace always covers the 30 days to the day the scan ran – pass a scan run without them, or drop --from to scan afresh`,

@@ -23,6 +23,18 @@ const result = scan(scanOptions([repo.dir]));
 
 **Anti-pattern.** Asserting today's date computed once before the spawn, which fails for a run that crosses midnight.
 
+## The package version
+
+**Problem.** The version changes at every publish, and `VERSION` in `src/scan.js` is the value under test. A test that writes out `1.0.3` fails at the next bump, and one that compares with `VERSION` checks the code against itself.
+
+**Solution.** Compare with `PKG.version` from `tests/fixtures.js`, which reads `package.json` directly, and build other versions from its major (`` `${major + 1}.2.3` ``) rather than writing them out.
+
+```js
+assert.equal(result.version, PKG.version);
+```
+
+**When to use.** Any test of the pr-pace version: the scan JSON's `version`, the pace line's `pr-pace vN`, `--version` and `pace --from`'s refusal of another major's scan.
+
 ## Test file layout
 
 Test files are `tests/*.test.js`, with helpers beside them. `node --test` treats every file under a folder named `test/` as a test file, so the folder is `tests/` to keep helpers such as `fixtures.js` from running as tests.

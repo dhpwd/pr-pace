@@ -6,12 +6,9 @@ import { after, before, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { paceLine } from "../src/pace.js";
 import { dayOf, zoneFormatter } from "../src/time.js";
-import { Repo, removeDir, tempDir } from "./fixtures.js";
+import { PKG, Repo, removeDir, tempDir } from "./fixtures.js";
 
 const BIN = fileURLToPath(new URL("../bin/pr-pace.js", import.meta.url));
-const PKG = JSON.parse(
-  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
-);
 const root = tempDir();
 after(() => removeDir(root));
 
@@ -339,6 +336,73 @@ describe("pace", () => {
       const result = run("pace", "--from", file);
       assert.equal(result.code, 1, JSON.stringify(options));
       assert.match(result.stderr, message);
+    }
+  });
+
+  test("--from refuses a saved scan from another major version or with a malformed version, and reads one without a version as this major", () => {
+    const scan = JSON.parse(readFileSync(saved, "utf8"));
+    // So the --from test above covers a scan carrying the current version.
+    assert.equal(scan.version, PKG.version);
+    const line = `${paceLine(scan, PKG.version)}\n`;
+    const file = join(root, "versioned.json");
+    const major = Number(PKG.version.split(".")[0]);
+
+    const { version: _, ...unversioned } = scan;
+    for (const accepted of [
+      unversioned,
+      { ...scan, version: `${major}.99.0` },
+    ]) {
+      writeFileSync(file, JSON.stringify(accepted));
+      const result = run("pace", "--from", file);
+      assert.equal(result.code, 0, result.stderr);
+      assert.equal(result.stdout, line);
+    }
+
+    // With --since set too, as the version is checked before the options.
+    const since = { ...scan.options, since: "2026-01-01" };
+    for (const other of [major + 1, major - 1]) {
+      const scanned = `${other}.2.3`;
+      writeFileSync(
+        file,
+        JSON.stringify({ ...scan, version: scanned, options: since }),
+      );
+      const result = run("pace", "--from", file);
+      assert.equal(result.code, 1, scanned);
+      assert.equal(result.stdout, "");
+      assert.equal(
+        result.stderr,
+        `pr-pace: ${file} was scanned with pr-pace ${scanned}, and this is pr-pace ${PKG.version} – a PR pace line must come from one major version's rules, so run pr-pace pace afresh, or print it with that version: npx pr-pace@${other} pace --from ${file}\n`,
+      );
+    }
+
+    // The report prints no version, so it builds from another major's scan.
+    writeFileSync(
+      file,
+      JSON.stringify({ ...scan, version: `${major + 1}.0.0` }),
+    );
+    const report = run(
+      "report",
+      "--from",
+      file,
+      "--out",
+      join(root, "versioned.html"),
+    );
+    assert.equal(report.code, 0, report.stderr);
+
+    for (const malformed of [
+      major,
+      "",
+      `v${PKG.version}`,
+      `${major + 1}.0.0; echo injected`,
+    ]) {
+      writeFileSync(file, JSON.stringify({ ...scan, version: malformed }));
+      const result = run("pace", "--from", file);
+      assert.equal(result.code, 1, String(malformed));
+      assert.equal(result.stdout, "");
+      assert.equal(
+        result.stderr,
+        `pr-pace: ${file} isn't a pr-pace scan – pass a file written by pr-pace scan\n`,
+      );
     }
   });
 });

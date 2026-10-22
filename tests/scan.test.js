@@ -9,6 +9,7 @@ import {
   DEV,
   MERGER,
   OTHER,
+  PKG,
   Repo,
   removeDir,
   scanOptions,
@@ -1529,11 +1530,13 @@ describe("JSON output", () => {
       timeZone: "Europe/London",
     });
     assert.deepEqual(Object.keys(result), [
+      "version",
       "generated_at",
       "options",
       "repos",
       "prs",
     ]);
+    assert.equal(result.version, PKG.version);
     assert.equal(result.generated_at, "2026-10-17T21:00:00+01:00");
     assert.deepEqual(Object.keys(result.options), [
       "authors",

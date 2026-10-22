@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { LINGUIST_ATTRIBUTES, pathExcluder } from "./exclude.js";
 import { git } from "./git.js";
 import { latestNames } from "./report/client.js";
@@ -48,6 +49,8 @@ import { formatInstant, zoneFormatter } from "./time.js";
  * @property {string | null} reverted_by
  *
  * @typedef {object} ScanResult
+ * @property {string} [version] the pr-pace version that wrote the scan. A scan
+ * written before the field has none
  * @property {string} generated_at
  * @property {{ authors: string[], all_authors: boolean, include_docs: boolean, exclude: string[], since: string | null, until: string | null, timezone: string }} options
  * @property {RepoResult[]} repos
@@ -70,6 +73,11 @@ import { formatInstant, zoneFormatter } from "./time.js";
  *
  * @typedef {{ name: string, email: string }} Identity
  */
+
+/** @type {string} */
+export const VERSION = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+).version;
 
 const FIELD = "\x1f";
 const RECORD = "\x1e";
@@ -954,6 +962,7 @@ export function scan(options) {
   );
 
   return {
+    version: VERSION,
     generated_at: formatInstant(options.now ?? Date.now(), formatter),
     options: {
       authors: options.allAuthors

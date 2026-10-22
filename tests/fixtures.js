@@ -1,5 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { repoFreeEnv } from "../src/git.js";
@@ -19,6 +25,11 @@ export const OTHER = { name: "Other Person", email: "other@example.com" };
 export const MERGER = { name: "Merge Clicker", email: "merger@example.com" };
 /** @type {Identity} */
 const COMMITTER = { name: "Fixture Committer", email: "committer@example.com" };
+
+/** package.json, read directly so tests check src against it. */
+export const PKG = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+);
 
 /** The scan's notional run time: Saturday 17th October 2026, 20:00 UTC. */
 export const NOW = Date.UTC(2026, 9, 17, 20);

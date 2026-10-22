@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { describe, test } from "node:test";
-import { paceLine, paceOf } from "../src/pace.js";
+import { paceLine, paceOf, versionRefusal } from "../src/pace.js";
 
 /** The form every share line takes. */
 const LINE =
@@ -175,5 +175,20 @@ describe("PR pace", () => {
       scanOf(Array.from({ length: 300 }, () => pr({ lines: 2000 }))),
     ];
     for (const scan of scans) assert.match(paceLine(scan, "1.0.0"), LINE);
+  });
+});
+
+describe("pace --from's version refusal", () => {
+  test("refuses another major's scan, reading one without a version as 1.0.x whatever the running major", () => {
+    assert.equal(
+      versionRefusal("s.json", undefined, "2.0.0"),
+      "s.json was scanned with pr-pace 1.0.x, before scans recorded their version, and this is pr-pace 2.0.0 – a PR pace line must come from one major version's rules, so run pr-pace pace afresh, or print it with that version: npx pr-pace@1 pace --from s.json",
+    );
+    assert.equal(
+      versionRefusal("s.json", "1.4.2", "2.0.0"),
+      "s.json was scanned with pr-pace 1.4.2, and this is pr-pace 2.0.0 – a PR pace line must come from one major version's rules, so run pr-pace pace afresh, or print it with that version: npx pr-pace@1 pace --from s.json",
+    );
+    assert.equal(versionRefusal("s.json", "2.3.4", "2.0.0"), null);
+    assert.equal(versionRefusal("s.json", undefined, "1.4.2"), null);
   });
 });
