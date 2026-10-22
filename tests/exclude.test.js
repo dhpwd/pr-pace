@@ -165,6 +165,12 @@ describe("default exclusions", () => {
     }
   });
 
+  test("count a file named after a build folder, at the root and nested", () => {
+    for (const path of ["build", "dist", "scripts/build", "lib/dist"]) {
+      assert.equal(excluded(path), false, path);
+    }
+  });
+
   test("count config .txt files and leave out prose .txt files", () => {
     for (const path of [
       "requirements.txt",
