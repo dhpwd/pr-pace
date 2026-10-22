@@ -253,6 +253,18 @@ export function assignSeries(rows, keyOf, labelOf) {
 }
 
 /**
+ * Each author's name on their latest PR, so someone who changed their git
+ * name shows under the one they use now. A later row for a key replaces an
+ * earlier one's name, so this relies on the scan's PR order – see "JSON
+ * output" in docs/specs/v1.md.
+ * @param {Row[]} rows
+ * @returns {Map<string, string>}
+ */
+export function latestNames(rows) {
+  return new Map(rows.map((row) => [row.authorKey, row.author_name]));
+}
+
+/**
  * One column per period with its rows, per-series parts and the 4-period
  * moving average of the total. For a metric that doesn't stack the average
  * pools the four periods: reverted ÷ PRs, or the median PR, across them.
@@ -789,9 +801,10 @@ export function drawChart(
  * @param {Column | null} column
  * @param {Period} period
  * @param {Metric} metric
- * @param {boolean} showAuthor
+ * @param {((row: Row) => string) | null} authorOf the name to show for a
+ * row's author, or null to leave out the Author column
  */
-export function drawDetails(column, period, metric, showAuthor) {
+export function drawDetails(column, period, metric, authorOf) {
   const title = byId("details-title");
   const summary = byId("details-summary");
   const table = byId("details-table");
@@ -818,7 +831,7 @@ export function drawDetails(column, period, metric, showAuthor) {
     "Repo",
     "PR",
     "Title",
-    ...(showAuthor ? ["Author"] : []),
+    ...(authorOf ? ["Author"] : []),
     "Lines",
     weightedLabel,
   ];
@@ -852,7 +865,7 @@ export function drawDetails(column, period, metric, showAuthor) {
             ? [h("span", { class: "tag" }, ["reverted"])]
             : []),
         ]),
-        ...(showAuthor ? [h("td", {}, [row.author_name])] : []),
+        ...(authorOf ? [h("td", {}, [authorOf(row)])] : []),
         h("td", { class: "num" }, [formatNumber(row.lines)]),
         h("td", { class: "num" }, [
           formatMetric(weightOf(row.lines), "weighted"),
@@ -987,11 +1000,12 @@ export function main(scan) {
     (row) => row.repo,
     (row) => row.repo,
   );
-  const authorSeries = assignSeries(
-    rows,
-    (row) => row.authorKey,
-    (row) => row.author_name,
-  );
+  // From every row, not the selected range, so a label never changes with the
+  // range.
+  const names = latestNames(rows);
+  const authorName = (/** @type {Row} */ row) =>
+    names.get(row.authorKey) ?? row.author_name;
+  const authorSeries = assignSeries(rows, (row) => row.authorKey, authorName);
   const other = {
     key: "__other",
     label: "Other",
@@ -1170,7 +1184,12 @@ export function main(scan) {
       },
     );
     const column = model.columns.find((c) => c.key === selected) ?? null;
-    drawDetails(column, view.period, view.metric, allowAuthorSplit);
+    drawDetails(
+      column,
+      view.period,
+      view.metric,
+      allowAuthorSplit ? authorName : null,
+    );
   };
 
   const render = () => {

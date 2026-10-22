@@ -5,6 +5,7 @@ import {
   assignSeries,
   chartModel,
   formatMetric,
+  latestNames,
   loadView,
   metaLine,
   metrics,
@@ -371,6 +372,28 @@ describe("report figures", () => {
     assert.equal(series.size, 7);
     assert.equal(series.get("repo-0")?.colour, "var(--series-1)");
     assert.equal(series.get("repo-7"), undefined);
+  });
+
+  test("an author's series is labelled with the name on their latest PR", () => {
+    const rows = [
+      row({ author_name: "Old Name", merged_at: "2026-09-01T10:00:00+00:00" }),
+      row({
+        author_name: "Other Dev",
+        author_email: "other@example.com",
+        authorKey: "other@example.com",
+        merged_at: "2026-09-15T10:00:00+00:00",
+      }),
+      row({ author_name: "New Name", merged_at: "2026-10-01T10:00:00+00:00" }),
+    ];
+    const names = latestNames(rows);
+    assert.equal(names.get("dev@example.com"), "New Name");
+    assert.equal(names.get("other@example.com"), "Other Dev");
+    const series = assignSeries(
+      rows,
+      (r) => r.authorKey,
+      (r) => names.get(r.authorKey) ?? r.author_name,
+    );
+    assert.equal(series.get("dev@example.com")?.label, "New Name");
   });
 });
 
