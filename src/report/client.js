@@ -800,10 +800,10 @@ export function drawChart(
  * @param {Column | null} column
  * @param {Period} period
  * @param {Metric} metric
- * @param {Map<string, string> | null} authorNames from `latestNames`, or null
- * to leave out the Author column
+ * @param {((row: Row) => string) | null} authorOf the name to show for a
+ * row's author, or null to leave out the Author column
  */
-export function drawDetails(column, period, metric, authorNames) {
+export function drawDetails(column, period, metric, authorOf) {
   const title = byId("details-title");
   const summary = byId("details-summary");
   const table = byId("details-table");
@@ -830,7 +830,7 @@ export function drawDetails(column, period, metric, authorNames) {
     "Repo",
     "PR",
     "Title",
-    ...(authorNames ? ["Author"] : []),
+    ...(authorOf ? ["Author"] : []),
     "Lines",
     weightedLabel,
   ];
@@ -864,9 +864,7 @@ export function drawDetails(column, period, metric, authorNames) {
             ? [h("span", { class: "tag" }, ["reverted"])]
             : []),
         ]),
-        ...(authorNames
-          ? [h("td", {}, [authorNames.get(row.authorKey) ?? row.author_name])]
-          : []),
+        ...(authorOf ? [h("td", {}, [authorOf(row)])] : []),
         h("td", { class: "num" }, [formatNumber(row.lines)]),
         h("td", { class: "num" }, [
           formatMetric(weightOf(row.lines), "weighted"),
@@ -1004,11 +1002,9 @@ export function main(scan) {
   // From every row, not the selected range, so a label never changes with the
   // range.
   const names = latestNames(rows);
-  const authorSeries = assignSeries(
-    rows,
-    (row) => row.authorKey,
-    (row) => names.get(row.authorKey) ?? row.author_name,
-  );
+  const authorName = (/** @type {Row} */ row) =>
+    names.get(row.authorKey) ?? row.author_name;
+  const authorSeries = assignSeries(rows, (row) => row.authorKey, authorName);
   const other = {
     key: "__other",
     label: "Other",
@@ -1191,7 +1187,7 @@ export function main(scan) {
       column,
       view.period,
       view.metric,
-      allowAuthorSplit ? names : null,
+      allowAuthorSplit ? authorName : null,
     );
   };
 
