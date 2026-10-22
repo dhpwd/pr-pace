@@ -1,6 +1,6 @@
 {
   "name": "pr-pace",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "Measure PR pace from local git history: a one-line PR pace to post, and PR count, size-weighted PRs, median PR size, lines changed and revert rate per person over time",
   "license": "MIT",
   "author": "Dan Hopwood",
