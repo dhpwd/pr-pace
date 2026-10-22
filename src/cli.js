@@ -186,6 +186,10 @@ const COMMANDS = {
 const TIMESTAMP =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/i;
 
+// A semver package version, so the npx command that pace --from suggests for
+// another major's scan can hold nothing from the file but a version.
+const PACKAGE_VERSION = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?$/;
+
 /**
  * Turns a --since or --until value into an epoch-ms bound: inclusive for
  * --since, exclusive for --until.
@@ -393,10 +397,12 @@ function runPace(values, positionals) {
     const file = values.from;
     result = readFromScan(file, values, positionals, "prints the PR pace");
     // Checked first, as another major's options may not mean what the checks
-    // below expect. A scan without a version predates the field, so it reads
-    // as this major.
+    // below expect. A scan without a version predates the field – see "JSON
+    // output" in docs/specs/v1.md.
     const { version = VERSION, options } = result;
-    if (typeof version !== "string") throw notAScan(file);
+    if (typeof version !== "string" || !PACKAGE_VERSION.test(version)) {
+      throw notAScan(file);
+    }
     const major = majorOf(version);
     if (major !== majorOf(VERSION)) {
       throw new Error(
