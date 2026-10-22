@@ -661,6 +661,22 @@ describe("authors", () => {
     );
     assert.match(warning, /--author/);
   });
+
+  test("the no-match warning names a renamed author by the name on their latest PR", () => {
+    const repo = newRepo({ email: "nobody@example.com" });
+    repo.commit("Initial commit");
+    repo.squash(1, "One", {
+      author: { name: "Old Name", email: DEV.email },
+      files: { "a.js": "a\n" },
+    });
+    repo.squash(2, "Two", {
+      author: { name: "New Name", email: DEV.email },
+      files: { "b.js": "b\n" },
+    });
+    assert.deepEqual(scanRepo(repo).repos[0].warnings, [
+      `no PRs match the author filter. Most frequent PR authors: New Name <${DEV.email}> (2) – pass --author to choose, once for each of your identities`,
+    ]);
+  });
 });
 
 describe("agent PRs", () => {
@@ -1387,6 +1403,46 @@ describe("agent PRs", () => {
       assert.deepEqual(scanRepo(repo).repos[0].warnings, [
         `2 PRs credit ${label(OWNER)}${reason}`,
       ]);
+    });
+
+    test("it names the owner by their name, not their login in any case, when an older PR carries the name", () => {
+      const repo = newRepo();
+      repo.commit("Initial commit");
+      repo.git("remote", "add", "origin", ORIGIN);
+      repo.squash(1, "Own work", { files: files() });
+      repo.squash(2, "Merged with email privacy on", {
+        author: { name: "Dev One", email: OWNER.email },
+        files: files(),
+      });
+      repo.squash(3, "Agent work", {
+        author: COPILOT,
+        files: files(),
+        body: trailers({ name: "DEV-ONE", email: OWNER.email }),
+      });
+      assert.deepEqual(scanRepo(repo).repos[0].warnings, [
+        `2 PRs credit ${label({ name: "Dev One", email: OWNER.email })}${reason}`,
+      ]);
+    });
+
+    test("it names the owner from all PRs in range, including those an --author name matches", () => {
+      const repo = newRepo();
+      repo.commit("Initial commit");
+      repo.git("remote", "add", "origin", ORIGIN);
+      repo.squash(1, "Merged with email privacy on", {
+        author: { name: "Dev One", email: OWNER.email },
+        files: files(),
+      });
+      repo.squash(2, "Agent work", {
+        author: COPILOT,
+        files: files(),
+        body: trailers(OWNER),
+      });
+      assert.deepEqual(
+        scanRepo(repo, { authors: ["Dev One"] }).repos[0].warnings,
+        [
+          `1 PR credits ${label({ name: "Dev One", email: OWNER.email })}${reason}`,
+        ],
+      );
     });
 
     test("each origin URL form, the owner in any case and the id-less address all warn", () => {

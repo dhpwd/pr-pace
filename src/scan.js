@@ -1,5 +1,6 @@
 import { LINGUIST_ATTRIBUTES, pathExcluder } from "./exclude.js";
 import { git } from "./git.js";
+import { latestNames } from "./report/client.js";
 import { findRepos, repoNames } from "./repos.js";
 import { formatInstant, zoneFormatter } from "./time.js";
 
@@ -530,7 +531,8 @@ function applyBranchAuthors(repoPath, merges, warnings) {
  * The id and login of a GitHub no-reply address, `<id>+<login>@` or the older
  * id-less `<login>@` form – see "Detecting PRs" in docs/specs/v1.md. Rules over
  * GitHub no-reply addresses test these parts rather than matching the address
- * again, each requiring the id or not.
+ * again, each requiring the id or not. `latestNames` in src/report/client.js
+ * repeats the pattern, as the report's inlined code can't import this module.
  * @param {string} lower a lowercased email
  * @returns {{ id: string | undefined, login: string } | undefined}
  */
@@ -627,16 +629,25 @@ function creditCoAuthors(repoPath, prs, tipMessages) {
 
 /**
  * PR counts by author email, most frequent first, each labelled `Name <email>`
- * from the first PR seen.
+ * with the email of the first PR seen and the name the report's legend gives
+ * them (`latestNames`) over all the repo's PRs in range, not only those
+ * counted.
  * @param {Pr[]} prs
+ * @param {Pr[]} inRange the repo's PRs in range, oldest first
  */
-function authorCounts(prs) {
+function authorCounts(prs, inRange) {
+  const names = latestNames(
+    inRange.map((pr) => ({
+      authorKey: pr.authorEmail.toLowerCase(),
+      author_name: pr.authorName,
+    })),
+  );
   /** @type {Map<string, { label: string, email: string, count: number }>} */
   const counts = new Map();
   for (const pr of prs) {
     const key = pr.authorEmail.toLowerCase();
     const entry = counts.get(key) ?? {
-      label: `${pr.authorName} <${pr.authorEmail}>`,
+      label: `${names.get(key)} <${pr.authorEmail}>`,
       email: pr.authorEmail,
       count: 0,
     };
@@ -654,7 +665,7 @@ function authorCounts(prs) {
  * @param {Pr[]} prs
  */
 function noMatchWarning(prs) {
-  const top = authorCounts(prs).slice(0, 5);
+  const top = authorCounts(prs, prs).slice(0, 5);
   const warning = `no PRs match the author filter. Most frequent PR authors: ${top.map(({ label, count }) => `${label} (${count})`).join(", ")} – pass --author to choose, once for each of your identities`;
   const agents = top
     .filter(({ email }) => isCodingAgent(email))
@@ -691,7 +702,7 @@ function ownerNoReplyWarnings(repoPath, prs, matches) {
   const owner = GITHUB_REMOTE.exec(url)?.[1].toLowerCase();
   if (!owner) return [];
   const owned = missed.filter((pr) => login(pr) === owner);
-  return authorCounts(owned).map(
+  return authorCounts(owned, prs).map(
     ({ label, count }) =>
       `${count} PR${count === 1 ? " credits" : "s credit"} ${label}, the GitHub no-reply address of this repo's owner, which the author filter doesn't match – if it's you, pass it as an extra --author alongside your own email, or map it to your usual identity in .mailmap`,
   );

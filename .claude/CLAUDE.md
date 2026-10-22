@@ -37,7 +37,7 @@ A Node CLI that measures PR pace from local git history – a one-line PR pace t
 
 ## Pattern index
 
-- `docs/patterns/report-inlining.md` – read before changing the report's browser code: how it's inlined from modules and the rules those modules follow
+- `docs/patterns/report-inlining.md` – read before changing the report's browser code or a rule the CLI shares with it: how it's inlined from modules, the rules those modules follow and how the CLI imports a shared rule
 - `docs/patterns/git.md` – read before adding a git call or spawning git: the wrapper that never throws, per-repo warnings, the environment git runs in, batching and `-z` parsing
 - `docs/patterns/dates.md` – read before touching dates or periods: day strings in the scan's timezone and the helpers that keep results independent of `TZ`
 - `docs/patterns/testing.md` – read before writing tests or calling a Node built-in the code doesn't use yet: fixture repos isolated from the machine's git config, testing commands that count back from today, the test file layout and running the suite on the Node floor
