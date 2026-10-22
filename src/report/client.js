@@ -254,14 +254,33 @@ export function assignSeries(rows, keyOf, labelOf) {
 
 /**
  * Each author's name on their latest PR, so someone who changed their git
- * name shows under the one they use now. A later row for a key replaces an
- * earlier one's name, so this relies on the scan's PR order – see "JSON
- * output" in docs/specs/v1.md.
+ * name shows under the one they use now. A name equal, ignoring case, to the
+ * login of the author's GitHub no-reply address is skipped when they have
+ * another, as an agent's trailer or a merge PR's branch tip can name them by
+ * login – `authorCounts` in src/scan.js labels the CLI's warnings by the same
+ * rule. A later row for a key replaces an earlier one's name, so this relies
+ * on the scan's PR order – see "JSON output" in docs/specs/v1.md.
  * @param {Row[]} rows
  * @returns {Map<string, string>}
  */
 export function latestNames(rows) {
-  return new Map(rows.map((row) => [row.authorKey, row.author_name]));
+  /** @type {Map<string, string>} */
+  const names = new Map();
+  /** @type {Set<string>} keys with a name other than their login */
+  const named = new Set();
+  for (const row of rows) {
+    const key = row.authorKey;
+    const login = /^(?:(\d+)\+)?([^@]+)@users\.noreply\.github\.com$/.exec(
+      key,
+    )?.[2];
+    if (row.author_name.toLowerCase() !== login) {
+      named.add(key);
+      names.set(key, row.author_name);
+    } else if (!named.has(key)) {
+      names.set(key, row.author_name);
+    }
+  }
+  return names;
 }
 
 /**

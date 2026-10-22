@@ -627,25 +627,38 @@ function creditCoAuthors(repoPath, prs, tipMessages) {
 
 /**
  * PR counts by author email, most frequent first, each labelled `Name <email>`
- * from the first PR seen.
- * @param {Pr[]} prs
+ * with the email of the first PR seen and the name the report's legend gives
+ * them (`latestNames` in src/report/client.js): the name on their latest PR,
+ * skipping their GitHub no-reply login when they have another name.
+ * @param {Pr[]} prs oldest first
  */
 function authorCounts(prs) {
-  /** @type {Map<string, { label: string, email: string, count: number }>} */
+  /** @type {Map<string, { name: string, named: boolean, email: string, count: number }>} */
   const counts = new Map();
   for (const pr of prs) {
     const key = pr.authorEmail.toLowerCase();
     const entry = counts.get(key) ?? {
-      label: `${pr.authorName} <${pr.authorEmail}>`,
+      name: pr.authorName,
+      named: false,
       email: pr.authorEmail,
       count: 0,
     };
+    if (pr.authorName.toLowerCase() !== noReplyParts(key)?.login) {
+      entry.named = true;
+      entry.name = pr.authorName;
+    } else if (!entry.named) {
+      entry.name = pr.authorName;
+    }
     entry.count++;
     counts.set(key, entry);
   }
-  return [...counts.values()].sort(
-    (a, b) => b.count - a.count || a.label.localeCompare(b.label),
-  );
+  return [...counts.values()]
+    .map(({ name, email, count }) => ({
+      label: `${name} <${email}>`,
+      email,
+      count,
+    }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 }
 
 /**

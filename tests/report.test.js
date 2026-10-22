@@ -395,6 +395,28 @@ describe("report figures", () => {
     );
     assert.equal(series.get("dev@example.com")?.label, "New Name");
   });
+
+  test("an author's label skips their GitHub login, in any case, when they have another name", () => {
+    /**
+     * @param {string} email
+     * @param {string[]} names oldest first
+     */
+    const latest = (email, names) =>
+      latestNames(
+        names.map((author_name) =>
+          row({ author_name, author_email: email, authorKey: email }),
+        ),
+      ).get(email);
+    const noReply = "1001+dev-one@users.noreply.github.com";
+    assert.equal(latest(noReply, ["Dev One", "dev-one"]), "Dev One");
+    assert.equal(latest(noReply, ["dev-one", "Dev One"]), "Dev One");
+    assert.equal(latest(noReply, ["Dev One", "DEV-ONE"]), "Dev One");
+    assert.equal(latest(noReply, ["dev-one", "DEV-ONE"]), "DEV-ONE");
+    assert.equal(
+      latest("dev-one@users.noreply.github.com", ["Dev One", "dev-one"]),
+      "Dev One",
+    );
+  });
 });
 
 describe("HTML report", () => {
