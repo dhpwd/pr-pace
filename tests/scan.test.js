@@ -1420,7 +1420,7 @@ describe("agent PRs", () => {
         body: trailers({ name: "DEV-ONE", email: OWNER.email }),
       });
       assert.deepEqual(scanRepo(repo).repos[0].warnings, [
-        `2 PRs credit Dev One <1001+dev-one@users.noreply.github.com>${reason}`,
+        `2 PRs credit ${label({ name: "Dev One", email: OWNER.email })}${reason}`,
       ]);
     });
 
