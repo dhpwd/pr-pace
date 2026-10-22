@@ -91,7 +91,11 @@ const LOCKFILES = new Set([
 
 const BUILD_SUFFIXES = [".min.js", ".min.css", ".map"];
 
-const BUILD_DIRS = new Set(["dist", "build", "vendor", "node_modules"]);
+/**
+ * Folders-only globs with no inner slash, so each matches its folder at any
+ * depth but not a file of the same name.
+ */
+const BUILD_DIRS = ["dist/", "build/", "vendor/", "node_modules/"];
 
 /** The .gitattributes attributes that exclude a file from lines changed. */
 export const LINGUIST_ATTRIBUTES = [
@@ -189,7 +193,7 @@ function isConfigTxt(segments) {
  * @returns {(path: string) => boolean}
  */
 export function pathExcluder({ includeDocs, globs }) {
-  const matchers = globs.map(globMatcher);
+  const matchers = [...BUILD_DIRS, ...globs].map(globMatcher);
   return (path) => {
     const segments = path.split("/");
     const name = segments[segments.length - 1];
@@ -205,9 +209,6 @@ export function pathExcluder({ includeDocs, globs }) {
     }
     if (LOCKFILES.has(name)) return true;
     if (BUILD_SUFFIXES.some((suffix) => lower.endsWith(suffix))) return true;
-    if (segments.slice(0, -1).some((segment) => BUILD_DIRS.has(segment))) {
-      return true;
-    }
     return matchers.some((matches) => matches(path));
   };
 }
