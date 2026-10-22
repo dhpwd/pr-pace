@@ -254,8 +254,9 @@ export function assignSeries(rows, keyOf, labelOf) {
 
 /**
  * Each author's name on their latest PR, so someone who changed their git
- * name shows under the one they use now. Rows run in merge order, and a later
- * entry for a key replaces the earlier one's name.
+ * name shows under the one they use now. A later row for a key replaces an
+ * earlier one's name, so this relies on the scan's PR order – see "JSON
+ * output" in docs/specs/v1.md.
  * @param {Row[]} rows
  * @returns {Map<string, string>}
  */
