@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { describe, test } from "node:test";
-import { paceLine, paceOf, versionRefusal } from "../src/pace.js";
+import {
+  authorPaceLines,
+  paceLine,
+  paceOf,
+  versionRefusal,
+} from "../src/pace.js";
 
 /** The form every share line takes. */
 const LINE =
@@ -175,6 +180,113 @@ describe("PR pace", () => {
       scanOf(Array.from({ length: 300 }, () => pr({ lines: 2000 }))),
     ];
     for (const scan of scans) assert.match(paceLine(scan, "1.0.0"), LINE);
+  });
+});
+
+describe("PR pace per author", () => {
+  test("gives each author with a PR in the window a labelled line, ordered by lowercased label by code unit", () => {
+    const amy = { author_name: "amy lower", author_email: "Amy@Example.com" };
+    const bob = { author_name: "Bob Upper", author_email: "bob@example.com" };
+    const zed = { author_name: "Zed Last", author_email: "zed@example.com" };
+    // After z by code unit, where localeCompare would put it among the e's.
+    const emile = {
+      author_name: "Émile Accent",
+      author_email: "emile@example.com",
+    };
+    const lines = authorPaceLines(
+      scanOf([
+        pr({ ...zed, lines: 400 }),
+        pr({ ...amy, lines: 100 }),
+        pr({ ...emile, lines: 900 }),
+        pr({ ...bob, lines: 0 }),
+        pr({ ...amy, author_email: "amy@example.com", lines: 1600 }),
+      ]),
+      "1.0.0",
+    );
+    assert.deepEqual(lines, [
+      "amy lower <Amy@Example.com>\tPR pace 1.2/wk · 30 days to 2026-10-19 · 2 PRs · median 850 lines · pr-pace v1",
+      "Bob Upper <bob@example.com>\tPR pace 0.0/wk · 30 days to 2026-10-19 · 1 PR · median 0 lines · pr-pace v1",
+      "Zed Last <zed@example.com>\tPR pace 0.5/wk · 30 days to 2026-10-19 · 1 PR · median 400 lines · pr-pace v1",
+      "Émile Accent <emile@example.com>\tPR pace 0.7/wk · 30 days to 2026-10-19 · 1 PR · median 900 lines · pr-pace v1",
+    ]);
+    for (const line of lines) assert.match(line.split("\t")[1], LINE);
+  });
+
+  test("labels an author with their latest name over the whole scan and the email on their first PR", () => {
+    const lines = authorPaceLines(
+      scanOf([
+        pr({
+          author_name: "Dev Before",
+          author_email: "Dev@Example.com",
+          merged_at: "2026-08-03T12:00:00-04:00",
+        }),
+        pr({ author_name: "Dev During", author_email: "dev@example.com" }),
+        pr({
+          author_name: "Dev After",
+          author_email: "DEV@example.com",
+          merged_at: "2026-10-20T00:00:00-04:00",
+        }),
+      ]),
+      "1.0.0",
+    );
+    assert.deepEqual(lines, [
+      "Dev After <Dev@Example.com>\tPR pace 0.2/wk · 30 days to 2026-10-19 · 1 PR · median 100 lines · pr-pace v1",
+    ]);
+  });
+
+  test("an author under two addresses that .mailmap doesn't join gets a line for each", () => {
+    const lines = authorPaceLines(
+      scanOf([
+        pr({ author_email: "dev@example.com", lines: 400 }),
+        pr({ author_email: "dev@work.example.com", lines: 100 }),
+      ]),
+      "1.0.0",
+    );
+    assert.deepEqual(lines, [
+      "Dev One <dev@example.com>\tPR pace 0.5/wk · 30 days to 2026-10-19 · 1 PR · median 400 lines · pr-pace v1",
+      "Dev One <dev@work.example.com>\tPR pace 0.2/wk · 30 days to 2026-10-19 · 1 PR · median 100 lines · pr-pace v1",
+    ]);
+  });
+
+  test("an author whose only PR in the window was reverted, or is a revert, gets a zero line, and one with none in the window gets no line", () => {
+    const lines = authorPaceLines(
+      scanOf([
+        // 03:59 UTC on 20th September: inside the window in UTC, not here.
+        pr({
+          author_name: "Old Timer",
+          author_email: "old@example.com",
+          merged_at: "2026-09-19T23:59:00-04:00",
+        }),
+        pr({
+          author_name: "Reverted Author",
+          author_email: "reverted@example.com",
+          lines: 400,
+          reverted_by: "a".repeat(40),
+        }),
+        pr({
+          author_name: "Revert Author",
+          author_email: "revert@example.com",
+          lines: 400,
+          is_revert: true,
+        }),
+      ]),
+      "1.0.0",
+    );
+    assert.deepEqual(lines, [
+      "Revert Author <revert@example.com>\tPR pace 0.0/wk · 30 days to 2026-10-19 · 0 PRs · median – · pr-pace v1",
+      "Reverted Author <reverted@example.com>\tPR pace 0.0/wk · 30 days to 2026-10-19 · 0 PRs · median – · pr-pace v1",
+    ]);
+  });
+
+  test("an empty window gives no lines", () => {
+    assert.deepEqual(authorPaceLines(scanOf([]), "1.0.0"), []);
+    assert.deepEqual(
+      authorPaceLines(
+        scanOf([pr({ merged_at: "2026-09-19T12:00:00-04:00" })]),
+        "1.0.0",
+      ),
+      [],
+    );
   });
 });
 
