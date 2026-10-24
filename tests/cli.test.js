@@ -6,7 +6,7 @@ import { after, before, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { paceLine } from "../src/pace.js";
 import { dayOf, zoneFormatter } from "../src/time.js";
-import { PKG, Repo, removeDir, tempDir } from "./fixtures.js";
+import { DEV, OTHER, PKG, Repo, removeDir, tempDir } from "./fixtures.js";
 
 const BIN = fileURLToPath(new URL("../bin/pr-pace.js", import.meta.url));
 const root = tempDir();
@@ -214,6 +214,50 @@ describe("pace", () => {
   const saved = join(root, "recent.json");
   before(() => writeFileSync(saved, run("scan", recent.dir).stdout));
 
+  // Three people with PRs in the window and one with a PR only before it. Dev
+  // One also merges under a work address, which .mailmap joins.
+  const team = new Repo(join(root, "team"));
+  team.commit("Initial commit", {
+    date: ago(60),
+    files: {
+      ".mailmap": `${DEV.name} <${DEV.email}> <dev@work.example.com>\n`,
+    },
+  });
+  team.squash(10, "Add an old thing", {
+    author: { name: "Old Timer", email: "old@example.com" },
+    date: ago(40),
+    files: { "old.js": "x\n".repeat(100) },
+  });
+  team.squash(11, "Add a thing", {
+    date: ago(20),
+    files: { "a.js": "x\n".repeat(400) },
+  });
+  team.squash(12, "Add a work thing", {
+    author: { name: DEV.name, email: "dev@work.example.com" },
+    date: ago(15),
+    files: { "w.js": "x\n".repeat(100) },
+  });
+  team.squash(13, "Add another thing", {
+    author: OTHER,
+    date: ago(10),
+    files: { "o.js": "x\n".repeat(900) },
+  });
+  team.squash(14, "Add a third thing", {
+    author: { name: "anna third", email: "Anna@Example.com" },
+    date: ago(5),
+    files: { "t.js": "x\n".repeat(1600) },
+  });
+  // Runs either side of midnight print different days, so each output's days
+  // are checked against the days the runs spanned, then taken out to compare.
+  const undated = (
+    /** @type {string} */ output,
+    /** @type {string[]} */ days,
+  ) =>
+    output.replaceAll(/ · 30 days to (\S+) · /g, (_, day) => {
+      assert.ok(days.includes(day), day);
+      return " · 30 days to … · ";
+    });
+
   test("prints the share line for the 30 days to today, with the package's major version", () => {
     const first = londonDay();
     const result = run("pace", recent.dir);
@@ -265,14 +309,37 @@ describe("pace", () => {
       "--fetch",
       "--branch",
       "--author",
+      "--all-authors",
       "--exclude",
       "--from",
     ]) {
       assert.match(help.stdout, new RegExp(`${option}\\b`));
     }
     assert.ok(help.stdout.includes(AUTHOR_HELP), help.stdout);
+    for (const text of [
+      `
+  --all-authors           Print one line per author: name <email>, a tab,
+                          then their PR pace line
+`,
+      `
+  --from <scan.json>      Print the line from a saved scan instead of
+                          scanning, counting back from the day it ran. Paths
+                          and scan options other than --all-authors can't be
+                          combined with it. A scan from another major version
+                          of pr-pace is refused
+`,
+      `so post it whole.
+
+With --all-authors, it prints one line per author instead, each starting with
+the author's name and email and a tab – post only what follows the tab.
+
+Options
+`,
+      "\n  pr-pace pace ~/code --all-authors\n",
+    ]) {
+      assert.ok(help.stdout.includes(text), help.stdout);
+    }
     for (const option of [
-      "--all-authors",
       "--since",
       "--until",
       "--include-docs",
@@ -290,8 +357,8 @@ describe("pace", () => {
       [["pace", "--since", "2026-01-01"], window],
       [["pace", "--until", "2026-01-01"], window],
       [
-        ["pace", "--all-authors"],
-        /PR pace is one person's figure – pass --author for someone else, not --all-authors/,
+        ["pace", "--all-authors", "--author", "dev@example.com"],
+        /--author and --all-authors can't be combined/,
       ],
       [
         ["pace", "--include-docs"],
@@ -302,6 +369,10 @@ describe("pace", () => {
         /--from prints the PR pace from a saved scan, so paths can't be used with it/,
       ],
       [["pace", "--from", saved, "--branch", "main"], /so --branch can't/],
+      [
+        ["pace", "--from", saved, "--all-authors", "--branch", "main"],
+        /, so --branch can't/,
+      ],
       [["pace", "--from", saved, "--since", "2026-01-01"], /so --since can't/],
     ];
     for (const [args, message] of cases) {
@@ -312,16 +383,12 @@ describe("pace", () => {
     }
   });
 
-  test("refuses a saved scan that covers a date range, every author or docs", () => {
+  test("refuses a saved scan that covers a date range or docs", () => {
     const scan = JSON.parse(readFileSync(saved, "utf8"));
     /** @type {[Record<string, unknown>, RegExp][]} */
     const cases = [
       [{ since: "2026-01-01" }, /scanned with --since or --until, and PR pace/],
       [{ until: "2026-12-31" }, /scanned with --since or --until, and PR pace/],
-      [
-        { all_authors: true, authors: [] },
-        /scanned with --all-authors, and PR pace is one person's figure/,
-      ],
       [
         { include_docs: true },
         /scanned with --include-docs, and every PR pace line counts lines the same way/,
@@ -335,6 +402,153 @@ describe("pace", () => {
       );
       const result = run("pace", "--from", file);
       assert.equal(result.code, 1, JSON.stringify(options));
+      assert.match(result.stderr, message);
+    }
+  });
+
+  test("--all-authors prints a line per author with a PR in the window, joining the addresses .mailmap joins, each as --author prints it", () => {
+    const first = londonDay();
+    const all = run("pace", team.dir, "--all-authors");
+    // In the order the lines sort in.
+    const own = ["Anna@Example.com", DEV.email, OTHER.email].map((email) =>
+      run("pace", team.dir, "--author", email),
+    );
+    const last = londonDay();
+    assert.equal(all.code, 0, all.stderr);
+    assert.equal(all.stderr, "");
+    const lines = undated(all.stdout, [first, last]).trimEnd().split("\n");
+    assert.deepEqual(lines, [
+      `anna third <Anna@Example.com>\tPR pace 0.9/wk · 30 days to … · 1 PR · median 1600 lines · ${version}`,
+      `Dev One <dev@example.com>\tPR pace 0.7/wk · 30 days to … · 2 PRs · median 250 lines · ${version}`,
+      `Other Person <other@example.com>\tPR pace 0.7/wk · 30 days to … · 1 PR · median 900 lines · ${version}`,
+    ]);
+    for (const result of own) assert.equal(result.code, 0, result.stderr);
+    assert.deepEqual(
+      lines.map((line) => `${line.split("\t")[1]}\n`),
+      own.map((result) => undated(result.stdout, [first, last])),
+    );
+  });
+
+  test("--all-authors with no PR in the window prints nothing and says so", () => {
+    const first = londonDay();
+    const result = run("pace", repo.dir, "--all-authors");
+    const last = londonDay();
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.stdout, "");
+    const match =
+      /^pr-pace: no author has a PR merged in the 30 days to (\S+)\n$/.exec(
+        result.stderr,
+      );
+    assert.ok(match, result.stderr);
+    assert.ok(match[1] === first || match[1] === last, match[1]);
+  });
+
+  test("--from prints a saved --all-authors scan's lines only with --all-authors, and refuses a one-person scan with it", () => {
+    const file = join(root, "team.json");
+    const first = londonDay();
+    const live = run("pace", team.dir, "--all-authors");
+    writeFileSync(file, run("scan", team.dir, "--all-authors").stdout);
+    const last = londonDay();
+    const result = run("pace", "--from", file, "--all-authors");
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.stdout.split("\n").length, 4);
+    assert.equal(
+      undated(result.stdout, [first, last]),
+      undated(live.stdout, [first, last]),
+    );
+
+    const without = run("pace", "--from", file);
+    assert.equal(without.code, 1);
+    assert.equal(without.stdout, "");
+    assert.equal(
+      without.stderr,
+      `pr-pace: ${file} was scanned with --all-authors – pass --all-authors to print one line per author, or pass a scan of one person's PRs\n`,
+    );
+
+    const one = run("pace", "--from", saved, "--all-authors");
+    assert.equal(one.code, 1);
+    assert.equal(one.stdout, "");
+    assert.equal(
+      one.stderr,
+      `pr-pace: ${saved} was scanned for one person, so it can't give a line per author – drop --all-authors, or drop --from to scan afresh\n`,
+    );
+
+    const report = run(
+      "report",
+      "--from",
+      file,
+      "--all-authors",
+      "--out",
+      join(root, "team.html"),
+    );
+    assert.equal(report.code, 1);
+    assert.match(
+      report.stderr,
+      /--from builds the report from a saved scan, so --all-authors can't be used with it/,
+    );
+  });
+
+  test("--from checks a saved --all-authors scan's version, then its dates, then --all-authors, then docs", () => {
+    const one = JSON.parse(readFileSync(saved, "utf8"));
+    const scan = {
+      ...one,
+      options: {
+        ...one.options,
+        authors: [],
+        all_authors: true,
+        since: "2026-01-01",
+      },
+    };
+    const file = join(root, "team-refused.json");
+    const major = Number(PKG.version.split(".")[0]);
+    const other = `${major + 1}.0.0`;
+    writeFileSync(file, JSON.stringify({ ...scan, version: other }));
+    for (const flags of [[], ["--all-authors"]]) {
+      const result = run("pace", "--from", file, ...flags);
+      assert.equal(result.code, 1, String(flags));
+      assert.ok(
+        result.stderr.startsWith(
+          `pr-pace: ${file} was scanned with pr-pace ${other}, and this is pr-pace ${PKG.version} – `,
+        ),
+        result.stderr,
+      );
+    }
+
+    /** @type {[typeof scan, Record<string, unknown>, string[], RegExp][]} */
+    const cases = [
+      [scan, {}, [], /scanned with --since or --until, and PR pace/],
+      [
+        scan,
+        { since: null, include_docs: true },
+        [],
+        /scanned with --all-authors – /,
+      ],
+      [
+        scan,
+        { since: null, include_docs: true },
+        ["--all-authors"],
+        /scanned with --include-docs, and every PR pace line/,
+      ],
+      [
+        one,
+        { since: "2026-01-01" },
+        ["--all-authors"],
+        /scanned with --since or --until, and PR pace/,
+      ],
+      [
+        one,
+        { include_docs: true },
+        ["--all-authors"],
+        /scanned for one person, so it can't give a line per author/,
+      ],
+    ];
+    for (const [base, options, flags, message] of cases) {
+      writeFileSync(
+        file,
+        JSON.stringify({ ...base, options: { ...base.options, ...options } }),
+      );
+      const result = run("pace", "--from", file, ...flags);
+      assert.equal(result.code, 1, JSON.stringify([options, flags]));
       assert.match(result.stderr, message);
     }
   });

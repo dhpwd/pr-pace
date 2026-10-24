@@ -1,4 +1,9 @@
-import { medianLines, presetRange, weightOf } from "./report/client.js";
+import {
+  latestNames,
+  medianLines,
+  presetRange,
+  weightOf,
+} from "./report/client.js";
 import { addDays, dayOf, startOfDay, zoneFormatter } from "./time.js";
 
 /**
@@ -6,13 +11,12 @@ import { addDays, dayOf, startOfDay, zoneFormatter } from "./time.js";
  */
 
 /**
- * PR pace over the 30 days to the scan's run day – see "PR pace" in
- * docs/specs/v1.md. Taking the run day from `generated_at` gives a saved scan
- * the same figure whenever it's read.
+ * The scan's run day, and whether a PR merged in the 30 days to it. Taking the
+ * run day from `generated_at` gives a saved scan the same window whenever it's
+ * read.
  * @param {import('./scan.js').ScanResult} scan
- * @returns {Pace}
  */
-export function paceOf(scan) {
+function windowOf(scan) {
   const formatter = zoneFormatter(scan.options.timezone);
   const today = dayOf(Date.parse(scan.generated_at), formatter);
   // The report's "30 days" preset, so the line and the preset cover the same
@@ -24,15 +28,27 @@ export function paceOf(scan) {
   });
   const from = startOfDay(days.from, formatter);
   const to = startOfDay(addDays(days.to, 1), formatter);
-  const prs = scan.prs.filter((pr) => {
-    const merged = Date.parse(pr.merged_at);
-    return (
-      pr.is_revert === false &&
-      pr.reverted_by === null &&
-      merged >= from &&
-      merged < to
-    );
-  });
+  return {
+    today,
+    /** @param {import('./scan.js').PrResult} pr */
+    holds: (pr) => {
+      const merged = Date.parse(pr.merged_at);
+      return merged >= from && merged < to;
+    },
+  };
+}
+
+/**
+ * PR pace over the 30 days to the scan's run day – see "PR pace" in
+ * docs/specs/v1.md.
+ * @param {import('./scan.js').ScanResult} scan
+ * @returns {Pace}
+ */
+export function paceOf(scan) {
+  const { today, holds } = windowOf(scan);
+  const prs = scan.prs.filter(
+    (pr) => pr.is_revert === false && pr.reverted_by === null && holds(pr),
+  );
   const weighted = prs.reduce((sum, pr) => sum + weightOf(pr.lines), 0);
   return {
     today,
@@ -87,4 +103,51 @@ export function paceLine(scan, version) {
       : `median ${lines} line${lines === 1 ? "" : "s"}`,
     `pr-pace v${majorOf(version)}`,
   ].join(" · ");
+}
+
+/**
+ * `pace --all-authors`'s lines: `Name <email>`, a tab, then the line
+ * `paceLine` gives for that author's PRs alone – see "PR pace" in
+ * docs/specs/v1.md. The label takes the form the repo warnings use
+ * (`authorCounts` in src/scan.js), over the whole scan rather than one repo.
+ * Ordered by label rather than pace, so the lines don't read as a ranking.
+ * @param {import('./scan.js').ScanResult} scan
+ * @param {string} version
+ * @returns {string[]}
+ */
+export function authorPaceLines(scan, version) {
+  const rows = scan.prs.map((pr) => ({
+    pr,
+    authorKey: pr.author_email.toLowerCase(),
+    author_name: pr.author_name,
+  }));
+  const names = latestNames(rows);
+  /** @type {Map<string, { key: string, label: string, prs: import('./scan.js').PrResult[] }>} */
+  const authors = new Map();
+  for (const { pr, authorKey: key } of rows) {
+    const author = authors.get(key) ?? {
+      key,
+      // A tab from a co-author trailer would end the label early, and what
+      // follows the first tab is the line to post.
+      label: `${names.get(key)} <${pr.author_email}>`.replaceAll("\t", " "),
+      prs: [],
+    };
+    author.prs.push(pr);
+    authors.set(key, author);
+  }
+  const { holds } = windowOf(scan);
+  // By code unit, as localeCompare varies with the machine's locale.
+  const compare = (/** @type {string} */ a, /** @type {string} */ b) =>
+    a < b ? -1 : a > b ? 1 : 0;
+  return [...authors.values()]
+    .filter((author) => author.prs.some(holds))
+    .sort(
+      (a, b) =>
+        compare(a.label.toLowerCase(), b.label.toLowerCase()) ||
+        compare(a.key, b.key),
+    )
+    .map(
+      (author) =>
+        `${author.label}\t${paceLine({ ...scan, prs: author.prs }, version)}`,
+    );
 }

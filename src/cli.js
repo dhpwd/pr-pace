@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { paceLine, versionRefusal } from "./pace.js";
+import { authorPaceLines, paceLine, paceOf, versionRefusal } from "./pace.js";
 import { renderReport } from "./report.js";
 import { scan, VERSION } from "./scan.js";
 import { addDays, isDay, startOfDay, zoneFormatter } from "./time.js";
@@ -57,9 +57,15 @@ const SCAN_OPTION_HELP = {
 const SCAN_OPTIONS_HELP = Object.values(SCAN_OPTION_HELP).join("\n");
 
 // pace refuses the rest – see runPace.
-const PACE_OPTIONS_HELP = ["depth", "fetch", "branch", "author", "exclude"]
-  .map((name) => SCAN_OPTION_HELP[name])
-  .join("\n");
+const PACE_OPTIONS_HELP = [
+  SCAN_OPTION_HELP.depth,
+  SCAN_OPTION_HELP.fetch,
+  SCAN_OPTION_HELP.branch,
+  SCAN_OPTION_HELP.author,
+  `  --all-authors           Print one line per author: name <email>, a tab,
+                          then their PR pace line`,
+  SCAN_OPTION_HELP.exclude,
+].join("\n");
 
 const PATHS_HELP = `Each path is a repo, or a folder whose subfolders are repos (default: .).`;
 
@@ -81,11 +87,15 @@ over the 30 days to today, today included. Each PR counts √(lines ÷ 100).
 Revert PRs and PRs since reverted count zero. The line carries the window, the
 PR count, the median PR size and the tool's major version, so post it whole.
 
+With --all-authors, it prints one line per author instead, each starting with
+the author's name and email and a tab – post only what follows the tab.
+
 Options
   --from <scan.json>      Print the line from a saved scan instead of
                           scanning, counting back from the day it ran. Paths
-                          and scan options can't be combined with it. A scan
-                          from another major version of pr-pace is refused
+                          and scan options other than --all-authors can't be
+                          combined with it. A scan from another major version
+                          of pr-pace is refused
 ${PACE_OPTIONS_HELP}
   -h, --help              Show this help
 
@@ -96,6 +106,7 @@ ${LINES_HELP}
 
 Examples
   pr-pace pace ~/code
+  pr-pace pace ~/code --all-authors
   pr-pace pace --from scan.json
 `;
 
@@ -367,10 +378,11 @@ function runScan(values, positionals) {
  * @param {ArgValues} values
  * @param {string[]} positionals
  * @param {string} does what --from does with the scan, for the error
+ * @param {string[]} [accepted] scan options the command takes with --from
  */
-function readFromScan(file, values, positionals, does) {
+function readFromScan(file, values, positionals, does, accepted = []) {
   const scanFlags = Object.keys(SCAN_OPTIONS).filter(
-    (name) => values[name] !== undefined,
+    (name) => values[name] !== undefined && !accepted.includes(name),
   );
   if (positionals.length > 0 || scanFlags.length > 0) {
     const given = [
@@ -395,7 +407,9 @@ function runPace(values, positionals) {
   // counted the same way – see "PR pace" in docs/specs/v1.md.
   if (typeof values.from === "string") {
     const file = values.from;
-    result = readFromScan(file, values, positionals, "prints the PR pace");
+    result = readFromScan(file, values, positionals, "prints the PR pace", [
+      "all-authors",
+    ]);
     // Checked first, as another major's options may not mean what the checks
     // below expect.
     const { version, options } = result;
@@ -412,9 +426,14 @@ function runPace(values, positionals) {
         `${file} was scanned with --since or --until, and PR pace always covers the 30 days to the day the scan ran – pass a scan run without them, or drop --from to scan afresh`,
       );
     }
-    if (options.all_authors) {
+    if (options.all_authors && !values["all-authors"]) {
       throw new Error(
-        `${file} was scanned with --all-authors, and PR pace is one person's figure – pass a scan of one person's PRs, or drop --from to scan afresh`,
+        `${file} was scanned with --all-authors – pass --all-authors to print one line per author, or pass a scan of one person's PRs`,
+      );
+    }
+    if (!options.all_authors && values["all-authors"]) {
+      throw new Error(
+        `${file} was scanned for one person, so it can't give a line per author – drop --all-authors, or drop --from to scan afresh`,
       );
     }
     if (options.include_docs) {
@@ -428,11 +447,6 @@ function runPace(values, positionals) {
         "--since and --until can't be used with pace – it always covers the 30 days to today",
       );
     }
-    if (values["all-authors"]) {
-      throw new Error(
-        "PR pace is one person's figure – pass --author for someone else, not --all-authors",
-      );
-    }
     if (values["include-docs"]) {
       throw new Error(
         "--include-docs can't be used with pace – every PR pace line counts lines the same way",
@@ -441,7 +455,17 @@ function runPace(values, positionals) {
     result = scan(scanOptions(values, positionals));
     printWarnings(result);
   }
-  process.stdout.write(`${paceLine(result, VERSION)}\n`);
+  if (!values["all-authors"]) {
+    process.stdout.write(`${paceLine(result, VERSION)}\n`);
+    return;
+  }
+  const lines = authorPaceLines(result, VERSION);
+  if (lines.length === 0) {
+    process.stderr.write(
+      `pr-pace: no author has a PR merged in the 30 days to ${paceOf(result).today}\n`,
+    );
+  }
+  for (const line of lines) process.stdout.write(`${line}\n`);
 }
 
 /**
