@@ -318,8 +318,8 @@ describe("pace", () => {
     assert.ok(help.stdout.includes(AUTHOR_HELP), help.stdout);
     for (const text of [
       `
-  --all-authors           Print one line per author: name <email>, a tab,
-                          then their PR pace line
+  --all-authors           Print a table of every author's PR pace, highest
+                          first
 `,
       `
   --from <scan.json>      Print the line from a saved scan instead of
@@ -330,8 +330,9 @@ describe("pace", () => {
 `,
       `so post it whole.
 
-With --all-authors, it prints one line per author instead, each starting with
-the author's name and email and a tab – post only what follows the tab.
+With --all-authors, it prints a table instead: one row per author who merged a
+PR in the 30 days, highest PR pace first. The table is for reading – each
+person posts the line pace prints for them.
 
 Options
 `,
@@ -406,10 +407,10 @@ Options
     }
   });
 
-  test("--all-authors prints a line per author with a PR in the window, joining the addresses .mailmap joins, each as --author prints it", () => {
+  test("--all-authors prints a table row per author with a PR in the window, joining the addresses .mailmap joins, each with the figures --author prints", () => {
     const first = londonDay();
     const all = run("pace", team.dir, "--all-authors");
-    // In the order the lines sort in.
+    // In the order the rows sort in.
     const own = ["Anna@Example.com", DEV.email, OTHER.email].map((email) =>
       run("pace", team.dir, "--author", email),
     );
@@ -418,14 +419,23 @@ Options
     assert.equal(all.stderr, "");
     const lines = undated(all.stdout, [first, last]).trimEnd().split("\n");
     assert.deepEqual(lines, [
-      `anna third <Anna@Example.com>\tPR pace 0.9/wk · 30 days to … · 1 PR · median 1600 lines · ${version}`,
-      `Dev One <dev@example.com>\tPR pace 0.7/wk · 30 days to … · 2 PRs · median 250 lines · ${version}`,
-      `Other Person <other@example.com>\tPR pace 0.7/wk · 30 days to … · 1 PR · median 900 lines · ${version}`,
+      `PR pace · 30 days to … · ${version}`,
+      "pace/wk  PRs  median lines  author",
+      "    0.9    1          1600  anna third",
+      "    0.7    2           250  Dev One",
+      "    0.7    1           900  Other Person",
     ]);
     for (const result of own) assert.equal(result.code, 0, result.stderr);
     assert.deepEqual(
-      lines.map((line) => `${line.split("\t")[1]}\n`),
-      own.map((result) => undated(result.stdout, [first, last])),
+      lines.slice(2).map((line) => line.trim().split(/ +/).slice(0, 3)),
+      own.map((result) => {
+        const match =
+          /^PR pace (\S+)\/wk · .* · (\d+) PRs? · median (?:(\d+) lines?|(–)) · /.exec(
+            result.stdout,
+          );
+        assert.ok(match, result.stdout);
+        return [match[1], match[2], match[3] ?? match[4]];
+      }),
     );
   });
 
@@ -443,7 +453,7 @@ Options
     assert.ok(match[1] === first || match[1] === last, match[1]);
   });
 
-  test("--from prints a saved --all-authors scan's lines only with --all-authors, and refuses a one-person scan with it", () => {
+  test("--from prints a saved --all-authors scan's table only with --all-authors, and refuses a one-person scan with it", () => {
     const file = join(root, "team.json");
     const first = londonDay();
     const live = run("pace", team.dir, "--all-authors");
@@ -451,7 +461,7 @@ Options
     const last = londonDay();
     const result = run("pace", "--from", file, "--all-authors");
     assert.equal(result.code, 0, result.stderr);
-    assert.equal(result.stdout.split("\n").length, 4);
+    assert.equal(result.stdout.split("\n").length, 6);
     assert.equal(
       undated(result.stdout, [first, last]),
       undated(live.stdout, [first, last]),
@@ -462,7 +472,7 @@ Options
     assert.equal(without.stdout, "");
     assert.equal(
       without.stderr,
-      `pr-pace: ${file} was scanned with --all-authors – pass --all-authors to print one line per author, or pass a scan of one person's PRs\n`,
+      `pr-pace: ${file} was scanned with --all-authors – pass --all-authors to print a row per author, or pass a scan of one person's PRs\n`,
     );
 
     const one = run("pace", "--from", saved, "--all-authors");
@@ -470,7 +480,7 @@ Options
     assert.equal(one.stdout, "");
     assert.equal(
       one.stderr,
-      `pr-pace: ${saved} was scanned for one person, so it can't give a line per author – drop --all-authors, or drop --from to scan afresh\n`,
+      `pr-pace: ${saved} was scanned for one person, so it can't give a row per author – drop --all-authors, or drop --from to scan afresh\n`,
     );
 
     const report = run(
@@ -539,7 +549,7 @@ Options
         one,
         { include_docs: true },
         ["--all-authors"],
-        /scanned for one person, so it can't give a line per author/,
+        /scanned for one person, so it can't give a row per author/,
       ],
     ];
     for (const [base, options, flags, message] of cases) {

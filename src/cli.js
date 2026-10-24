@@ -62,8 +62,8 @@ const PACE_OPTIONS_HELP = [
   SCAN_OPTION_HELP.fetch,
   SCAN_OPTION_HELP.branch,
   SCAN_OPTION_HELP.author,
-  `  --all-authors           Print one line per author: name <email>, a tab,
-                          then their PR pace line`,
+  `  --all-authors           Print a table of every author's PR pace, highest
+                          first`,
   SCAN_OPTION_HELP.exclude,
 ].join("\n");
 
@@ -87,8 +87,9 @@ over the 30 days to today, today included. Each PR counts √(lines ÷ 100).
 Revert PRs and PRs since reverted count zero. The line carries the window, the
 PR count, the median PR size and the tool's major version, so post it whole.
 
-With --all-authors, it prints one line per author instead, each starting with
-the author's name and email and a tab – post only what follows the tab.
+With --all-authors, it prints a table instead: one row per author who merged a
+PR in the 30 days, highest PR pace first. The table is for reading – each
+person posts the line pace prints for them.
 
 Options
   --from <scan.json>      Print the line from a saved scan instead of
@@ -428,12 +429,12 @@ function runPace(values, positionals) {
     }
     if (options.all_authors && !values["all-authors"]) {
       throw new Error(
-        `${file} was scanned with --all-authors – pass --all-authors to print one line per author, or pass a scan of one person's PRs`,
+        `${file} was scanned with --all-authors – pass --all-authors to print a row per author, or pass a scan of one person's PRs`,
       );
     }
     if (!options.all_authors && values["all-authors"]) {
       throw new Error(
-        `${file} was scanned for one person, so it can't give a line per author – drop --all-authors, or drop --from to scan afresh`,
+        `${file} was scanned for one person, so it can't give a row per author – drop --all-authors, or drop --from to scan afresh`,
       );
     }
     if (options.include_docs) {

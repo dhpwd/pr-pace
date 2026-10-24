@@ -106,11 +106,12 @@ export function paceLine(scan, version) {
 }
 
 /**
- * `pace --all-authors`'s lines: `Name <email>`, a tab, then the line
- * `paceLine` gives for that author's PRs alone – see "PR pace" in
- * docs/specs/v1.md. The label takes the form the repo warnings use
- * (`authorCounts` in src/scan.js), over the whole scan rather than one repo.
- * Ordered by label rather than pace, so the lines don't read as a ranking.
+ * `pace --all-authors`'s table: a header line, a column-header row, then a row
+ * per author with a PR in the window, highest printed pace first – see "PR
+ * pace" in docs/specs/v1.md. Each row's figures are `paceOf` over that
+ * author's PRs alone. An author shows under the name the repo warnings use
+ * (`authorCounts` in src/scan.js), over the whole scan rather than one repo,
+ * with the email on their first PR only where rows share a name ignoring case.
  * @param {import('./scan.js').ScanResult} scan
  * @param {string} version
  * @returns {string[]}
@@ -122,32 +123,67 @@ export function authorPaceLines(scan, version) {
     author_name: pr.author_name,
   }));
   const names = latestNames(rows);
-  /** @type {Map<string, { key: string, label: string, prs: import('./scan.js').PrResult[] }>} */
+  /** @type {Map<string, { key: string, name: string, email: string, prs: import('./scan.js').PrResult[] }>} */
   const authors = new Map();
   for (const { pr, authorKey: key } of rows) {
     const author = authors.get(key) ?? {
       key,
-      // A tab from a co-author trailer would end the label early, and what
-      // follows the first tab is the line to post.
-      label: `${names.get(key)} <${pr.author_email}>`.replaceAll("\t", " "),
+      name: names.get(key) ?? pr.author_name,
+      email: pr.author_email,
       prs: [],
     };
     author.prs.push(pr);
     authors.set(key, author);
   }
-  const { holds } = windowOf(scan);
+  const { today, holds } = windowOf(scan);
+  const table = [...authors.values()]
+    .filter((author) => author.prs.some(holds))
+    .map((author) => {
+      const { pace, count, median } = paceOf({ ...scan, prs: author.prs });
+      return {
+        ...author,
+        cells: [
+          pace.toFixed(1),
+          String(count),
+          median === null ? "–" : String(Math.round(median)),
+        ],
+      };
+    });
+  if (table.length === 0) return [];
+  const seen = new Set();
+  const shared = new Set();
+  for (const { name } of table) {
+    const lower = name.toLowerCase();
+    if (seen.has(lower)) shared.add(lower);
+    seen.add(lower);
+  }
   // By code unit, as localeCompare varies with the machine's locale.
   const compare = (/** @type {string} */ a, /** @type {string} */ b) =>
     a < b ? -1 : a > b ? 1 : 0;
-  return [...authors.values()]
-    .filter((author) => author.prs.some(holds))
-    .sort(
-      (a, b) =>
-        compare(a.label.toLowerCase(), b.label.toLowerCase()) ||
-        compare(a.key, b.key),
-    )
-    .map(
-      (author) =>
-        `${author.label}\t${paceLine({ ...scan, prs: author.prs }, version)}`,
-    );
+  // On the printed pace, so rows showing the same figure fall to the name and
+  // the order can be checked from the output.
+  table.sort(
+    (a, b) =>
+      Number(b.cells[0]) - Number(a.cells[0]) ||
+      compare(a.name.toLowerCase(), b.name.toLowerCase()) ||
+      compare(a.key, b.key),
+  );
+  const headers = ["pace/wk", "PRs", "median lines"];
+  const widths = headers.map((header, i) =>
+    Math.max(header.length, ...table.map((row) => row.cells[i].length)),
+  );
+  const line = (/** @type {string[]} */ cells, /** @type {string} */ author) =>
+    [...cells.map((cell, i) => cell.padStart(widths[i])), author].join("  ");
+  return [
+    `PR pace · 30 days to ${today} · pr-pace v${majorOf(version)}`,
+    line(headers, "author"),
+    ...table.map((row) =>
+      line(
+        row.cells,
+        shared.has(row.name.toLowerCase())
+          ? `${row.name} <${row.email}>`
+          : row.name,
+      ),
+    ),
+  ];
 }
