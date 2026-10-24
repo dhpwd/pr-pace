@@ -639,8 +639,8 @@ function creditCoAuthors(repoPath, prs, tipMessages) {
  * PR counts by author email, most frequent first, each labelled `Name <email>`
  * with the email of the first PR seen and the name the report's legend gives
  * them (`latestNames`) over all the repo's PRs in range, not only those
- * counted. `authorPaceLines` in src/pace.js labels authors in the same form,
- * over the whole scan.
+ * counted. `authorPaceLines` in src/pace.js names authors the same way, over
+ * the whole scan.
  * @param {Pr[]} prs
  * @param {Pr[]} inRange the repo's PRs in range, oldest first
  */

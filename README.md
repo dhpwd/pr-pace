@@ -93,7 +93,7 @@ pr-pace pace --from scan.json
 
 Pass `--author` once for each address you commit under, since any `--author` replaces the default. `pace` also takes `--depth`, `--branch` and `--fetch`, as `scan` does. It refuses `--since`, `--until` and `--include-docs`, so every line covers one person's last 30 days and counts lines the same way. It still accepts `--exclude` for generated code the default rules miss, and excluding files can only lower the figure. `--from <scan.json>` prints the line from a saved scan, counting back from the day the scan ran. It refuses a scan made by another major version of pr-pace, since that version counted the PRs and lines by its own rules.
 
-With `--all-authors`, `pace` prints one line per author who merged a PR in the last 30 days, ordered by name rather than by pace. Each line starts with the author's name and email and a tab, followed by the line `--author <their email>` would print, as long as every scanned repo's `.mailmap` treats their addresses the same way. A person who commits under two addresses gets a line for each until the `.mailmap` of each scanned repo joins them (see [PRs opened by coding agents](#prs-opened-by-coding-agents) for an example). To print them from a saved scan, run `pace --from <scan.json> --all-authors` on a scan made with `scan --all-authors`.
+With `--all-authors`, `pace` prints a table of every author who merged a PR in the last 30 days, highest PR pace first, under a header line with the window and version. Each row's figures are the ones `--author <their email>` would print, as long as every scanned repo's `.mailmap` treats their addresses the same way. A row shows the author's email only where two rows share a name, which is how a person who commits under two addresses shows until the `.mailmap` of each scanned repo joins them (see [PRs opened by coding agents](#prs-opened-by-coding-agents) for an example). The table is for reading: each person posts the line `pace` prints for them. To print it from a saved scan, run `pace --from <scan.json> --all-authors` on a scan made with `scan --all-authors`.
 
 ### `pr-pace scan [path...]`
 
@@ -119,7 +119,7 @@ The split by author needs `--all-authors`, which counts every author's PRs for a
 
 Each author shows under the name on their latest PR. When PRs credit their GitHub no-reply address under both their name and their GitHub login, their name is shown. To choose the name shown, or to settle on one name for an email that carries two, map it in the `.mailmap` of each scanned repo that uses another name, as in the example under [PRs opened by coding agents](#prs-opened-by-coding-agents).
 
-The report contains your repo names, PR titles and authors' names and emails, so check it before you share it. The PR pace line contains none of these, but `pace --all-authors` puts each author's name and email before their line, so post only the part after the tab.
+The report contains your repo names, PR titles and authors' names and emails, so check it before you share it. The PR pace line contains none of these, but `pace --all-authors` lists authors' names, and their emails where two share a name.
 
 ## PRs opened by coding agents
 
