@@ -82,15 +82,21 @@ describe("PR pace", () => {
     );
   });
 
-  test("gives the same line whatever TZ the process runs under", () => {
+  test("gives the same lines whatever TZ the process runs under, per author too", () => {
     const scan = scanOf([
-      pr({ merged_at: "2026-09-19T23:59:00-04:00" }),
+      pr({
+        author_name: "Old Timer",
+        author_email: "old@example.com",
+        merged_at: "2026-09-19T23:59:00-04:00",
+      }),
       pr({ merged_at: "2026-09-20T00:00:00-04:00", lines: 400 }),
       pr({ merged_at: "2026-10-19T08:00:00-04:00", lines: 0 }),
     ]);
     const script = `
-      import { paceLine } from ${JSON.stringify(new URL("../src/pace.js", import.meta.url).href)};
-      console.log(paceLine(${JSON.stringify(scan)}, "1.0.0"));
+      import { authorPaceLines, paceLine } from ${JSON.stringify(new URL("../src/pace.js", import.meta.url).href)};
+      const scan = ${JSON.stringify(scan)};
+      console.log(paceLine(scan, "1.0.0"));
+      console.log(authorPaceLines(scan, "1.0.0").join("\\n"));
     `;
     const outputs = [
       "UTC",
@@ -106,7 +112,8 @@ describe("PR pace", () => {
     for (const output of outputs) assert.equal(output, outputs[0]);
     assert.equal(
       outputs[0],
-      "PR pace 0.5/wk · 30 days to 2026-10-19 · 2 PRs · median 200 lines · pr-pace v1\n",
+      "PR pace 0.5/wk · 30 days to 2026-10-19 · 2 PRs · median 200 lines · pr-pace v1\n" +
+        "Dev One <dev@example.com>\tPR pace 0.5/wk · 30 days to 2026-10-19 · 2 PRs · median 200 lines · pr-pace v1\n",
     );
   });
 
@@ -231,6 +238,18 @@ describe("PR pace per author", () => {
     );
     assert.deepEqual(lines, [
       "Dev After <Dev@Example.com>\tPR pace 0.2/wk · 30 days to 2026-10-19 · 1 PR · median 100 lines · pr-pace v1",
+    ]);
+  });
+
+  test("a tab in an author's name shows as a space, so the first tab always ends the label", () => {
+    const lines = authorPaceLines(
+      scanOf([
+        pr({ author_name: "Dev\tTab", author_email: "tab@example.com" }),
+      ]),
+      "1.0.0",
+    );
+    assert.deepEqual(lines, [
+      "Dev Tab <tab@example.com>\tPR pace 0.2/wk · 30 days to 2026-10-19 · 1 PR · median 100 lines · pr-pace v1",
     ]);
   });
 

@@ -106,12 +106,11 @@ export function paceLine(scan, version) {
 }
 
 /**
- * `pace --all-authors`: for each author with a PR merged in the window,
- * reverted and revert PRs included, `Name <email>`, a tab, then the line
- * `paceLine` gives for their PRs alone – see "PR pace" in docs/specs/v1.md.
- * Authors are keyed as the report's author split keys them, and labelled as
- * the repo warnings label them (`authorCounts` in src/scan.js). Ordered by
- * label rather than pace, so the lines don't read as a ranking.
+ * `pace --all-authors`'s lines: `Name <email>`, a tab, then the line
+ * `paceLine` gives for that author's PRs alone – see "PR pace" in
+ * docs/specs/v1.md. The label takes the form the repo warnings use
+ * (`authorCounts` in src/scan.js), over the whole scan rather than one repo.
+ * Ordered by label rather than pace, so the lines don't read as a ranking.
  * @param {import('./scan.js').ScanResult} scan
  * @param {string} version
  * @returns {string[]}
@@ -128,7 +127,9 @@ export function authorPaceLines(scan, version) {
   for (const { pr, authorKey: key } of rows) {
     const author = authors.get(key) ?? {
       key,
-      label: `${names.get(key)} <${pr.author_email}>`,
+      // A tab from a co-author trailer would end the label early, and what
+      // follows the first tab is the line to post.
+      label: `${names.get(key)} <${pr.author_email}>`.replaceAll("\t", " "),
       prs: [],
     };
     author.prs.push(pr);

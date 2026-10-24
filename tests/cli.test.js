@@ -514,24 +514,38 @@ Options
       );
     }
 
-    /** @type {[Record<string, unknown>, string[], RegExp][]} */
+    /** @type {[typeof scan, Record<string, unknown>, string[], RegExp][]} */
     const cases = [
-      [{}, [], /scanned with --since or --until, and PR pace/],
+      [scan, {}, [], /scanned with --since or --until, and PR pace/],
       [
+        scan,
         { since: null, include_docs: true },
         [],
         /scanned with --all-authors – /,
       ],
       [
+        scan,
         { since: null, include_docs: true },
         ["--all-authors"],
         /scanned with --include-docs, and every PR pace line/,
       ],
+      [
+        one,
+        { since: "2026-01-01" },
+        ["--all-authors"],
+        /scanned with --since or --until, and PR pace/,
+      ],
+      [
+        one,
+        { include_docs: true },
+        ["--all-authors"],
+        /scanned for one person, so it can't give a line per author/,
+      ],
     ];
-    for (const [options, flags, message] of cases) {
+    for (const [base, options, flags, message] of cases) {
       writeFileSync(
         file,
-        JSON.stringify({ ...scan, options: { ...scan.options, ...options } }),
+        JSON.stringify({ ...base, options: { ...base.options, ...options } }),
       );
       const result = run("pace", "--from", file, ...flags);
       assert.equal(result.code, 1, JSON.stringify([options, flags]));
