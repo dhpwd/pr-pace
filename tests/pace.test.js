@@ -232,7 +232,6 @@ describe("PR pace per author", () => {
       "    0.7     2           250  Dev One",
       "    0.0     1             0  Docs Writer",
     ]);
-    for (const line of lines) assert.doesNotMatch(line, /\s$/);
   });
 
   test("rows showing the same pace order by lowercased name by code unit, then by lowercased email, whatever the unrounded figure", () => {

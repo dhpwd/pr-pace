@@ -430,11 +430,11 @@ Options
       lines.slice(2).map((line) => line.trim().split(/ +/).slice(0, 3)),
       own.map((result) => {
         const match =
-          /^PR pace (\S+)\/wk · .* · (\d+) PRs? · median (?:(\d+) lines?|(–)) · /.exec(
+          /^PR pace (\S+)\/wk · .* · (\d+) PRs? · median (\d+) lines? · /.exec(
             result.stdout,
           );
         assert.ok(match, result.stdout);
-        return [match[1], match[2], match[3] ?? match[4]];
+        return match.slice(1, 4);
       }),
     );
   });
