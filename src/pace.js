@@ -111,7 +111,8 @@ export function paceLine(scan, version) {
  * pace" in docs/specs/v1.md. Each row's figures are `paceOf` over that
  * author's PRs alone. An author shows under the name the repo warnings use
  * (`authorCounts` in src/scan.js), over the whole scan rather than one repo,
- * with the email on their first PR only where rows share a name ignoring case.
+ * with the email on their first PR only where rows share a name ignoring case
+ * or the name is empty.
  * @param {import('./scan.js').ScanResult} scan
  * @param {string} version
  * @returns {string[]}
@@ -150,7 +151,9 @@ export function authorPaceLines(scan, version) {
       };
     });
   if (table.length === 0) return [];
+  /** @type {Set<string>} */
   const seen = new Set();
+  /** @type {Set<string>} */
   const shared = new Set();
   for (const { name } of table) {
     const lower = name.toLowerCase();
@@ -180,9 +183,11 @@ export function authorPaceLines(scan, version) {
     ...table.map((row) =>
       line(
         row.cells,
-        shared.has(row.name.toLowerCase())
-          ? `${row.name} <${row.email}>`
-          : row.name,
+        row.name === ""
+          ? `<${row.email}>`
+          : shared.has(row.name.toLowerCase())
+            ? `${row.name} <${row.email}>`
+            : row.name,
       ),
     ),
   ];

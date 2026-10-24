@@ -430,8 +430,8 @@ Options
       lines.slice(2).map((line) => line.trim().split(/ +/).slice(0, 3)),
       own.map((result) => {
         const match =
-          /^PR pace (\S+)\/wk · .* · (\d+) PRs? · median (\d+) lines? · /.exec(
-            result.stdout,
+          /^PR pace (\S+)\/wk · 30 days to … · (\d+) PRs? · median (\d+) lines? · /.exec(
+            undated(result.stdout, [first, last]),
           );
         assert.ok(match, result.stdout);
         return match.slice(1, 4);

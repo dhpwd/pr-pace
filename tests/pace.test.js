@@ -239,14 +239,15 @@ describe("PR pace per author", () => {
     // 100 lines' 0.233, so each pair below sorts the other way on the float.
     const lines = authorPaceLines(
       scanOf([
+        // Ordered by email as shown, the capital would put this one first.
         pr({
           author_name: "Dev One",
-          author_email: "dev@work.example.com",
+          author_email: "Dev@Work.example.com",
           lines: 100,
         }),
         pr({
           author_name: "Dev One",
-          author_email: "Dev@Example.com",
+          author_email: "dev@example.com",
           lines: 64,
         }),
         pr({
@@ -276,15 +277,15 @@ describe("PR pace per author", () => {
       ...HEAD,
       "    0.2    1            64  amy lower",
       "    0.2    1           100  Bob Upper",
-      "    0.2    1            64  Dev One <Dev@Example.com>",
-      "    0.2    1           100  Dev One <dev@work.example.com>",
+      "    0.2    1            64  Dev One <dev@example.com>",
+      "    0.2    1           100  Dev One <Dev@Work.example.com>",
       "    0.2    1            81  Zed Last",
       // After z by code unit, where localeCompare would put it among the e's.
       "    0.2    1           100  Émile Accent",
     ]);
   });
 
-  test("shows the first PR's email only on rows whose names match ignoring case, and each name as the latest over the whole scan", () => {
+  test("shows the first PR's email only on rows whose names match ignoring case or are empty, and each name as the latest over the whole scan", () => {
     const lines = authorPaceLines(
       scanOf([
         pr({
@@ -302,7 +303,13 @@ describe("PR pace per author", () => {
           author_email: "LATE@example.com",
           merged_at: "2026-10-20T00:00:00-04:00",
         }),
-        // Two people whose names match ignoring case.
+        // Two people whose names match ignoring case, one of them showing the
+        // email on a PR before the window.
+        pr({
+          author_name: "sam smith",
+          author_email: "SAM@Other.example.com",
+          merged_at: "2026-09-01T12:00:00-04:00",
+        }),
         pr({
           author_name: "Sam Smith",
           author_email: "sam@example.com",
@@ -310,7 +317,7 @@ describe("PR pace per author", () => {
         }),
         pr({
           author_name: "sam smith",
-          author_email: "SAM@Other.example.com",
+          author_email: "sam@other.example.com",
           lines: 400,
         }),
         pr({
@@ -318,6 +325,7 @@ describe("PR pace per author", () => {
           author_email: "sam@other.example.com",
           lines: 400,
         }),
+        pr({ author_name: "", author_email: "nameless@example.com" }),
         // One person under two addresses .mailmap doesn't join.
         pr({ author_email: "dev@example.com", lines: 400 }),
         pr({ author_email: "dev@work.example.com", lines: 100 }),
@@ -337,6 +345,7 @@ describe("PR pace per author", () => {
       "    0.9    2           400  sam smith <SAM@Other.example.com>",
       "    0.7    1           900  Sam Smith <sam@example.com>",
       "    0.5    1           400  Dev One <dev@example.com>",
+      "    0.2    1           100  <nameless@example.com>",
       "    0.2    1           100  Dev One <dev@work.example.com>",
       "    0.2    1           100  Pat Solo",
     ]);
