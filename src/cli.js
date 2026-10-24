@@ -56,24 +56,16 @@ const SCAN_OPTION_HELP = {
 
 const SCAN_OPTIONS_HELP = Object.values(SCAN_OPTION_HELP).join("\n");
 
-/** @type {Record<string, string>} */
-const PACE_OPTION_HELP = {
-  ...SCAN_OPTION_HELP,
-  "all-authors": `  --all-authors           Print one line per author: name <email>, a tab,
-                          then their PR pace line`,
-};
-
 // pace refuses the rest – see runPace.
 const PACE_OPTIONS_HELP = [
-  "depth",
-  "fetch",
-  "branch",
-  "author",
-  "all-authors",
-  "exclude",
-]
-  .map((name) => PACE_OPTION_HELP[name])
-  .join("\n");
+  SCAN_OPTION_HELP.depth,
+  SCAN_OPTION_HELP.fetch,
+  SCAN_OPTION_HELP.branch,
+  SCAN_OPTION_HELP.author,
+  `  --all-authors           Print one line per author: name <email>, a tab,
+                          then their PR pace line`,
+  SCAN_OPTION_HELP.exclude,
+].join("\n");
 
 const PATHS_HELP = `Each path is a repo, or a folder whose subfolders are repos (default: .).`;
 

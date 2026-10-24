@@ -109,24 +109,25 @@ export function paceLine(scan, version) {
  * `pace --all-authors`: for each author with a PR merged in the window,
  * reverted and revert PRs included, `Name <email>`, a tab, then the line
  * `paceLine` gives for their PRs alone – see "PR pace" in docs/specs/v1.md.
- * Authors are keyed and labelled as the report's legend has them. Ordered by
+ * Authors are keyed as the report's author split keys them, and labelled as
+ * the repo warnings label them (`authorCounts` in src/scan.js). Ordered by
  * label rather than pace, so the lines don't read as a ranking.
  * @param {import('./scan.js').ScanResult} scan
  * @param {string} version
  * @returns {string[]}
  */
 export function authorPaceLines(scan, version) {
-  const names = latestNames(
-    scan.prs.map((pr) => ({
-      authorKey: pr.author_email.toLowerCase(),
-      author_name: pr.author_name,
-    })),
-  );
-  /** @type {Map<string, { label: string, prs: import('./scan.js').PrResult[] }>} */
+  const rows = scan.prs.map((pr) => ({
+    pr,
+    authorKey: pr.author_email.toLowerCase(),
+    author_name: pr.author_name,
+  }));
+  const names = latestNames(rows);
+  /** @type {Map<string, { key: string, label: string, prs: import('./scan.js').PrResult[] }>} */
   const authors = new Map();
-  for (const pr of scan.prs) {
-    const key = pr.author_email.toLowerCase();
+  for (const { pr, authorKey: key } of rows) {
     const author = authors.get(key) ?? {
+      key,
       label: `${names.get(key)} <${pr.author_email}>`,
       prs: [],
     };
@@ -137,15 +138,15 @@ export function authorPaceLines(scan, version) {
   // By code unit, as localeCompare varies with the machine's locale.
   const compare = (/** @type {string} */ a, /** @type {string} */ b) =>
     a < b ? -1 : a > b ? 1 : 0;
-  return [...authors]
-    .filter(([, author]) => author.prs.some(holds))
+  return [...authors.values()]
+    .filter((author) => author.prs.some(holds))
     .sort(
-      ([keyA, a], [keyB, b]) =>
+      (a, b) =>
         compare(a.label.toLowerCase(), b.label.toLowerCase()) ||
-        compare(keyA, keyB),
+        compare(a.key, b.key),
     )
     .map(
-      ([, author]) =>
+      (author) =>
         `${author.label}\t${paceLine({ ...scan, prs: author.prs }, version)}`,
     );
 }

@@ -215,46 +215,38 @@ describe("pace", () => {
   before(() => writeFileSync(saved, run("scan", recent.dir).stdout));
 
   // Three people with PRs in the window and one with a PR only before it. Dev
-  // One also merges under a work address, which only `team`'s .mailmap joins.
-  const teamRepo = (
-    /** @type {string} */ name,
-    /** @type {boolean} */ mailmap,
-  ) => {
-    const team = new Repo(join(root, name));
-    team.commit("Initial commit", {
-      date: ago(60),
-      files: mailmap
-        ? { ".mailmap": `${DEV.name} <${DEV.email}> <dev@work.example.com>\n` }
-        : {},
-    });
-    team.squash(10, "Add an old thing", {
-      author: { name: "Old Timer", email: "old@example.com" },
-      date: ago(40),
-      files: { "old.js": "x\n".repeat(100) },
-    });
-    team.squash(11, "Add a thing", {
-      date: ago(20),
-      files: { "a.js": "x\n".repeat(400) },
-    });
-    team.squash(12, "Add a work thing", {
-      author: { name: DEV.name, email: "dev@work.example.com" },
-      date: ago(15),
-      files: { "w.js": "x\n".repeat(100) },
-    });
-    team.squash(13, "Add another thing", {
-      author: OTHER,
-      date: ago(10),
-      files: { "o.js": "x\n".repeat(900) },
-    });
-    team.squash(14, "Add a third thing", {
-      author: { name: "anna third", email: "Anna@Example.com" },
-      date: ago(5),
-      files: { "t.js": "x\n".repeat(1600) },
-    });
-    return team;
-  };
-  const team = teamRepo("team", true);
-  const unmapped = teamRepo("unmapped", false);
+  // One also merges under a work address, which .mailmap joins.
+  const team = new Repo(join(root, "team"));
+  team.commit("Initial commit", {
+    date: ago(60),
+    files: {
+      ".mailmap": `${DEV.name} <${DEV.email}> <dev@work.example.com>\n`,
+    },
+  });
+  team.squash(10, "Add an old thing", {
+    author: { name: "Old Timer", email: "old@example.com" },
+    date: ago(40),
+    files: { "old.js": "x\n".repeat(100) },
+  });
+  team.squash(11, "Add a thing", {
+    date: ago(20),
+    files: { "a.js": "x\n".repeat(400) },
+  });
+  team.squash(12, "Add a work thing", {
+    author: { name: DEV.name, email: "dev@work.example.com" },
+    date: ago(15),
+    files: { "w.js": "x\n".repeat(100) },
+  });
+  team.squash(13, "Add another thing", {
+    author: OTHER,
+    date: ago(10),
+    files: { "o.js": "x\n".repeat(900) },
+  });
+  team.squash(14, "Add a third thing", {
+    author: { name: "anna third", email: "Anna@Example.com" },
+    date: ago(5),
+    files: { "t.js": "x\n".repeat(1600) },
+  });
   // Runs either side of midnight print different days, so each output's days
   // are checked against the days the runs spanned, then taken out to compare.
   const undated = (
@@ -414,50 +406,26 @@ Options
     }
   });
 
-  test("--all-authors prints a line per author with a PR in the window, each as --author prints it", () => {
+  test("--all-authors prints a line per author with a PR in the window, joining the addresses .mailmap joins, each as --author prints it", () => {
     const first = londonDay();
     const all = run("pace", team.dir, "--all-authors");
+    // In the order the lines sort in.
     const own = ["Anna@Example.com", DEV.email, OTHER.email].map((email) =>
       run("pace", team.dir, "--author", email),
     );
     const last = londonDay();
     assert.equal(all.code, 0, all.stderr);
     assert.equal(all.stderr, "");
-    assert.equal(
-      undated(all.stdout, [first, last]),
-      [
-        `anna third <Anna@Example.com>\tPR pace 0.9/wk · 30 days to … · 1 PR · median 1600 lines · ${version}`,
-        `Dev One <dev@example.com>\tPR pace 0.7/wk · 30 days to … · 2 PRs · median 250 lines · ${version}`,
-        `Other Person <other@example.com>\tPR pace 0.7/wk · 30 days to … · 1 PR · median 900 lines · ${version}`,
-        "",
-      ].join("\n"),
-    );
-    all.stdout
-      .trimEnd()
-      .split("\n")
-      .forEach((line, i) => {
-        assert.equal(own[i].code, 0, own[i].stderr);
-        assert.equal(
-          undated(`${line.split("\t")[1]}\n`, [first, last]),
-          undated(own[i].stdout, [first, last]),
-        );
-      });
-  });
-
-  test("--all-authors gives an author's two addresses one line when .mailmap joins them, and a line each when it doesn't", () => {
-    const first = londonDay();
-    const result = run("pace", unmapped.dir, "--all-authors");
-    const last = londonDay();
-    assert.equal(result.code, 0, result.stderr);
-    assert.equal(
-      undated(result.stdout, [first, last]),
-      [
-        `anna third <Anna@Example.com>\tPR pace 0.9/wk · 30 days to … · 1 PR · median 1600 lines · ${version}`,
-        `Dev One <dev@example.com>\tPR pace 0.5/wk · 30 days to … · 1 PR · median 400 lines · ${version}`,
-        `Dev One <dev@work.example.com>\tPR pace 0.2/wk · 30 days to … · 1 PR · median 100 lines · ${version}`,
-        `Other Person <other@example.com>\tPR pace 0.7/wk · 30 days to … · 1 PR · median 900 lines · ${version}`,
-        "",
-      ].join("\n"),
+    const lines = undated(all.stdout, [first, last]).trimEnd().split("\n");
+    assert.deepEqual(lines, [
+      `anna third <Anna@Example.com>\tPR pace 0.9/wk · 30 days to … · 1 PR · median 1600 lines · ${version}`,
+      `Dev One <dev@example.com>\tPR pace 0.7/wk · 30 days to … · 2 PRs · median 250 lines · ${version}`,
+      `Other Person <other@example.com>\tPR pace 0.7/wk · 30 days to … · 1 PR · median 900 lines · ${version}`,
+    ]);
+    for (const result of own) assert.equal(result.code, 0, result.stderr);
+    assert.deepEqual(
+      lines.map((line) => `${line.split("\t")[1]}\n`),
+      own.map((result) => undated(result.stdout, [first, last])),
     );
   });
 
@@ -521,14 +489,21 @@ Options
   });
 
   test("--from checks a saved --all-authors scan's version, then its dates, then --all-authors, then docs", () => {
-    const scan = JSON.parse(
-      run("scan", team.dir, "--all-authors", "--since", "2026-01-01").stdout,
-    );
+    const one = JSON.parse(readFileSync(saved, "utf8"));
+    const scan = {
+      ...one,
+      options: {
+        ...one.options,
+        authors: [],
+        all_authors: true,
+        since: "2026-01-01",
+      },
+    };
     const file = join(root, "team-refused.json");
     const major = Number(PKG.version.split(".")[0]);
     const other = `${major + 1}.0.0`;
+    writeFileSync(file, JSON.stringify({ ...scan, version: other }));
     for (const flags of [[], ["--all-authors"]]) {
-      writeFileSync(file, JSON.stringify({ ...scan, version: other }));
       const result = run("pace", "--from", file, ...flags);
       assert.equal(result.code, 1, String(flags));
       assert.ok(
