@@ -234,6 +234,46 @@ describe("PR pace per author", () => {
     ]);
   });
 
+  test("rounds each row's pace and median as the share line does", () => {
+    // The share-line tests' boundaries: 4.667/wk prints 4.7, 2.333 prints 2.3
+    // and a 208.5-line median prints 209.
+    const lines = authorPaceLines(
+      scanOf([
+        ...Array.from({ length: 5 }, () =>
+          pr({
+            author_name: "Rounds Up",
+            author_email: "up@example.com",
+            lines: 1600,
+          }),
+        ),
+        ...Array.from({ length: 10 }, () =>
+          pr({
+            author_name: "Rounds Down",
+            author_email: "down@example.com",
+            lines: 100,
+          }),
+        ),
+        pr({
+          author_name: "Half Up",
+          author_email: "half@example.com",
+          lines: 0,
+        }),
+        pr({
+          author_name: "Half Up",
+          author_email: "half@example.com",
+          lines: 417,
+        }),
+      ]),
+      "1.0.0",
+    );
+    assert.deepEqual(lines, [
+      ...HEAD,
+      "    4.7    5          1600  Rounds Up",
+      "    2.3   10           100  Rounds Down",
+      "    0.5    2           209  Half Up",
+    ]);
+  });
+
   test("rows showing the same pace order by lowercased name by code unit, then by lowercased email, whatever the unrounded figure", () => {
     // 64 lines gives 0.187/wk and 81 lines 0.21, both printing as 0.2 beside
     // 100 lines' 0.233, so each pair below sorts the other way on the float.
