@@ -59,9 +59,12 @@ export function paceOf(scan) {
 }
 
 /**
- * A `paceOf` result with its figures as the share line and the `pace
- * --all-authors` table both print them – see "PR pace" in docs/specs/v1.md.
+ * A `paceOf` result with the pace and median rounded as the share line and
+ * the `pace --all-authors` table both print them – see "PR pace" in
+ * docs/specs/v1.md. The table sorts on `Number` of the pace, so it stays a
+ * plain decimal.
  * @param {Pace} result
+ * @returns {{ today: string, pace: string, count: number, median: number | null }}
  */
 function figuresOf(result) {
   return {
