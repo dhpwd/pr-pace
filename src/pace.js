@@ -59,6 +59,22 @@ export function paceOf(scan) {
 }
 
 /**
+ * A `paceOf` result with its figures as the share line and the `pace
+ * --all-authors` table print them: the pace to one decimal, and the median
+ * rounded half up to whole lines or null with no counted PR. Both outputs
+ * format through it, so a row's figures stay those on the author's own line –
+ * see "PR pace" in docs/specs/v1.md.
+ * @param {Pace} result
+ */
+function figuresOf(result) {
+  return {
+    ...result,
+    pace: result.pace.toFixed(1),
+    median: result.median === null ? null : Math.round(result.median),
+  };
+}
+
+/**
  * "1" for "1.4.2" – the major version a PR pace line carries, and the one
  * `pace --from` requires a saved scan to share.
  * @param {string} version
@@ -92,15 +108,14 @@ export function versionRefusal(file, scanVersion, version) {
  * major
  */
 export function paceLine(scan, version) {
-  const { today, pace, count, median } = paceOf(scan);
-  const lines = median === null ? null : Math.round(median);
+  const { today, pace, count, median } = figuresOf(paceOf(scan));
   return [
-    `PR pace ${pace.toFixed(1)}/wk`,
+    `PR pace ${pace}/wk`,
     `30 days to ${today}`,
     `${count} PR${count === 1 ? "" : "s"}`,
-    lines === null
+    median === null
       ? "median –"
-      : `median ${lines} line${lines === 1 ? "" : "s"}`,
+      : `median ${median} line${median === 1 ? "" : "s"}`,
     `pr-pace v${majorOf(version)}`,
   ].join(" · ");
 }
@@ -140,14 +155,12 @@ export function authorPaceLines(scan, version) {
   const table = [...authors.values()]
     .filter((author) => author.prs.some(holds))
     .map((author) => {
-      const { pace, count, median } = paceOf({ ...scan, prs: author.prs });
+      const { pace, count, median } = figuresOf(
+        paceOf({ ...scan, prs: author.prs }),
+      );
       return {
         ...author,
-        cells: [
-          pace.toFixed(1),
-          String(count),
-          median === null ? "–" : String(Math.round(median)),
-        ],
+        cells: [pace, String(count), median === null ? "–" : String(median)],
       };
     });
   if (table.length === 0) return [];
