@@ -60,10 +60,7 @@ export function paceOf(scan) {
 
 /**
  * A `paceOf` result with its figures as the share line and the `pace
- * --all-authors` table print them: the pace to one decimal, and the median
- * rounded half up to whole lines or null with no counted PR. Both outputs
- * format through it, so a row's figures stay those on the author's own line –
- * see "PR pace" in docs/specs/v1.md.
+ * --all-authors` table both print them – see "PR pace" in docs/specs/v1.md.
  * @param {Pace} result
  */
 function figuresOf(result) {
