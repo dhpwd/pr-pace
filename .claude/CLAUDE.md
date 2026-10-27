@@ -14,7 +14,7 @@ A Node CLI that measures PR pace from local git history – a one-line PR pace t
 - Read-only against scanned repos – `--fetch` is the only option that writes to them
 - The HTML report is one file: embedded scan JSON, inline SVG charts, vanilla JS, no external requests. It must work offline and as a message attachment
 - The spec's design decisions define what the numbers mean (unit of work, first-parent walk, PR attribution (who a PR counts for), line exclusions, size-weighted PRs, median PR size, revert handling, the PR pace figure and its 30-day window). Raise a change to any of them as a design decision before implementing it
-- The PR pace line carries the package's major version. A change to the figure's definition – weighting, window, which PRs count, line exclusions – needs a major version bump
+- The PR pace line carries the package's major version. A change to the figure's definition – weighting, window, which PRs count, line exclusions, how the line prints – needs a major version bump
 
 ## Commands
 
